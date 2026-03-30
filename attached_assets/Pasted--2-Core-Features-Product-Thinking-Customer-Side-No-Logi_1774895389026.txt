@@ -1,0 +1,184 @@
+🧠 2. Core Features (Product Thinking)
+👤 Customer Side (No Login)
+View dentists
+Select clinic
+Check availability (calendar slots)
+Book appointment
+Enter:
+Name
+Phone
+Problem (optional)
+🦷 Dentist Side (Login Required)
+Login / Signup
+Dashboard:
+Today's appointments
+Upcoming bookings
+Manage:
+Available time slots
+Working hours
+Break time
+Accept / Reject bookings
+Patient list
+🔥 Advanced Features (Add for value)
+WhatsApp / SMS confirmation
+Auto slot blocking
+Cancel / reschedule
+Admin analytics (optional later)
+🎯 3. USER FLOW (VERY IMPORTANT)
+Entry Screen
+[ I am a Customer ]   [ I am a Dentist ]
+Customer Flow
+→ Landing Page
+→ Dentist List
+→ Select Dentist
+→ View Calendar Slots
+→ Select Time
+→ Fill Details
+→ Book Appointment
+→ Success Screen
+Dentist Flow
+→ Login
+→ Dashboard
+→ Manage Slots
+→ View Appointments
+→ Accept / Reject
+🎨 4. UI/UX Strategy (Senior Level)
+
+Keep it:
+
+Minimal
+Medical clean (white + blue + soft green)
+No clutter
+Fast booking (max 3 steps)
+Design Style:
+Rounded cards
+Soft shadows
+Calendar UI (very important)
+Mobile-first
+🚀 5. MASTER PROMPT (COPY THIS)
+
+Paste this into Lovable / Bolt / v0 / Stitch
+
+💡 PROMPT:
+Create a modern, clean, and minimal dentist appointment booking web application.
+
+The application must have two user roles:
+1. Customer (no login required)
+2. Dentist (login required)
+
+---
+
+ENTRY SCREEN:
+- Show two options:
+  - "I am a Customer"
+  - "I am a Dentist"
+
+---
+
+CUSTOMER FLOW:
+
+1. Landing Page:
+- Show list of dentists with:
+  - Name
+  - Clinic name
+  - Location
+  - Rating
+  - "Book Appointment" button
+
+2. Dentist Profile Page:
+- Show dentist details
+- Show available time slots in a calendar UI
+- Show working hours
+
+3. Booking System:
+- User selects:
+  - Date
+  - Available time slot
+- Then fills:
+  - Name
+  - Phone number
+  - Optional message/problem
+
+4. Confirmation:
+- Show success screen:
+  - "Appointment Booked Successfully"
+  - Show booking details
+
+---
+
+DENTIST FLOW:
+
+1. Authentication:
+- Login / Signup for dentists only
+
+2. Dentist Dashboard:
+- Show:
+  - Today's appointments
+  - Upcoming appointments
+- Clean card layout
+
+3. Slot Management:
+- Add working hours
+- Add break time
+- Enable/disable slots
+- Auto remove booked slots
+
+4. Appointment Management:
+- View all bookings
+- Accept / Reject appointments
+- Mark as completed
+
+---
+
+BACKEND LOGIC:
+
+- Store users (dentists only)
+- Store appointments
+- Each appointment must include:
+  - Dentist ID
+  - Customer name
+  - Phone
+  - Date
+  - Time
+  - Status (pending, accepted, rejected)
+
+- Prevent double booking of slots
+
+---
+
+UI/UX REQUIREMENTS:
+
+- Minimal, modern design
+- Soft colors (white, blue, light green)
+- Mobile responsive
+- Smooth transitions
+- Clean typography
+- Calendar-based slot selection UI
+
+---
+
+EXTRA FEATURES:
+
+- Show real-time slot availability
+- Disable booked slots instantly
+- Simple notifications (toast messages)
+
+---
+
+TECH STACK:
+
+Frontend:
+- React / Next.js
+- Tailwind CSS
+
+Backend:
+- Node.js / Express OR Firebase
+
+Database:
+- MongoDB OR Firestore
+
+---
+
+GOAL:
+
+Build a fully working MVP that allows customers to easily book dentist appointments without login, and allows dentists to manage their bookings through a dashboard.
