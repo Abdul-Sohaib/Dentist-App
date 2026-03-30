@@ -1,7 +1,9 @@
 import { Feather } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Platform,
   Pressable,
   StyleSheet,
@@ -12,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
 import { StatusBadge } from "@/components/UI";
+import { downloadAppointmentTicket } from "@/utils/ticketPDF";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = [
@@ -24,6 +27,10 @@ export default function SuccessScreen() {
   const { appointments, dentists } = useApp();
   const insets = useSafeAreaInsets();
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
+  const topPad = Platform.OS === "web" ? 67 : insets.top;
+
+  const [downloading, setDownloading] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
   const apt = useMemo(
     () => appointments.find((a) => a.id === appointmentId),
@@ -34,6 +41,36 @@ export default function SuccessScreen() {
     () => dentists.find((d) => d.id === apt?.dentistId),
     [dentists, apt]
   );
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleDownload = async () => {
+    if (!apt || !dentist) return;
+    setDownloading(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      await downloadAppointmentTicket({
+        bookingId: apt.id.slice(-10),
+        patientName: apt.customerName,
+        phone: apt.customerPhone,
+        dentistName: dentist.name,
+        clinicName: dentist.clinic,
+        location: dentist.location,
+        date: apt.date,
+        time: apt.time,
+        problem: apt.problem,
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast("Ticket ready!");
+    } catch {
+      showToast("Could not generate ticket");
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   if (!apt || !dentist) {
     return (
@@ -48,16 +85,24 @@ export default function SuccessScreen() {
 
   const dateObj = new Date(apt.date + "T00:00:00");
   const displayDate = `${DAYS[dateObj.getDay()]}, ${dateObj.getDate()} ${MONTHS[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
+  const bookingRef = apt.id.slice(-10).toUpperCase();
 
   return (
-    <View style={[styles.container, { paddingBottom: bottomPad + 24 }]}>
+    <View style={[styles.container, { paddingTop: topPad + 16, paddingBottom: bottomPad + 24 }]}>
+      {toast && (
+        <View style={styles.toast}>
+          <Feather name="check-circle" size={15} color="#fff" />
+          <Text style={styles.toastText}>{toast}</Text>
+        </View>
+      )}
+
       <View style={styles.iconCircle}>
         <Feather name="check" size={36} color="#fff" />
       </View>
 
       <Text style={styles.title}>Appointment Booked!</Text>
       <Text style={styles.subtitle}>
-        Your appointment is confirmed with the dentist. Check back for status updates.
+        Your appointment is confirmed. Download your ticket below.
       </Text>
 
       <View style={styles.card}>
@@ -73,6 +118,12 @@ export default function SuccessScreen() {
           </View>
         </View>
 
+        <View style={styles.detail}>
+          <Feather name="hash" size={15} color={Colors.primary} />
+          <Text style={[styles.detailText, { color: Colors.primary, fontFamily: "Inter_600SemiBold" }]}>
+            #{bookingRef}
+          </Text>
+        </View>
         <View style={styles.detail}>
           <Feather name="user" size={15} color={Colors.text.muted} />
           <Text style={styles.detailText}>{apt.customerName}</Text>
@@ -102,23 +153,35 @@ export default function SuccessScreen() {
         </View>
       </View>
 
-      <View style={styles.actions}>
+      <Pressable
+        onPress={handleDownload}
+        disabled={downloading}
+        style={({ pressed }) => [
+          styles.downloadBtn,
+          { opacity: pressed || downloading ? 0.82 : 1 },
+        ]}
+      >
+        {downloading ? (
+          <ActivityIndicator color="#fff" size="small" />
+        ) : (
+          <Feather name="download" size={18} color="#fff" />
+        )}
+        <Text style={styles.downloadBtnText}>
+          {downloading ? "Generating..." : "Download Appointment Ticket"}
+        </Text>
+      </Pressable>
+
+      <View style={styles.secondaryActions}>
         <Pressable
           onPress={() => router.replace("/customer/dentists")}
-          style={({ pressed }) => [
-            styles.primaryBtn,
-            { opacity: pressed ? 0.88 : 1 },
-          ]}
+          style={({ pressed }) => [styles.outlineBtn, { opacity: pressed ? 0.7 : 1 }]}
         >
-          <Text style={styles.primaryBtnText}>Book Another</Text>
+          <Text style={styles.outlineBtnText}>Book Another</Text>
         </Pressable>
 
         <Pressable
           onPress={() => router.replace("/")}
-          style={({ pressed }) => [
-            styles.ghostBtn,
-            { opacity: pressed ? 0.7 : 1 },
-          ]}
+          style={({ pressed }) => [styles.ghostBtn, { opacity: pressed ? 0.7 : 1 }]}
         >
           <Text style={styles.ghostBtnText}>Go to Home</Text>
         </Pressable>
@@ -132,8 +195,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background.secondary,
     alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 28,
+    paddingHorizontal: 24,
   },
   center: {
     flex: 1,
@@ -152,21 +214,62 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#fff",
   },
+  toast: {
+    position: "absolute",
+    top: Platform.OS === "web" ? 80 : 60,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: Colors.secondary,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 30,
+    zIndex: 99,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 10,
+      },
+      android: { elevation: 6 },
+      web: {
+        boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
+      },
+    }),
+  },
+  toastText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 14,
+    color: "#fff",
+  },
   iconCircle: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: Colors.secondary,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 24,
+    marginBottom: 18,
+    ...Platform.select({
+      ios: {
+        shadowColor: Colors.secondary,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.35,
+        shadowRadius: 12,
+      },
+      android: { elevation: 6 },
+      web: {
+        boxShadow: `0 6px 20px ${Colors.secondary}55`,
+      },
+    }),
   },
   title: {
     fontFamily: "Inter_700Bold",
     fontSize: 26,
     color: Colors.text.primary,
     textAlign: "center",
-    marginBottom: 10,
+    marginBottom: 8,
   },
   subtitle: {
     fontFamily: "Inter_400Regular",
@@ -174,7 +277,7 @@ const styles = StyleSheet.create({
     color: Colors.text.secondary,
     textAlign: "center",
     lineHeight: 20,
-    marginBottom: 28,
+    marginBottom: 24,
     paddingHorizontal: 10,
   },
   card: {
@@ -185,20 +288,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     gap: 10,
-    marginBottom: 28,
+    marginBottom: 20,
     ...Platform.select({
       ios: {
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.08,
+        shadowOpacity: 0.07,
         shadowRadius: 12,
       },
       android: { elevation: 4 },
       web: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.08,
-        shadowRadius: 12,
+        boxShadow: "0 4px 16px rgba(0,0,0,0.07)",
       },
     }),
   },
@@ -243,6 +343,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     fontSize: 14,
     color: Colors.text.primary,
+    flex: 1,
   },
   statusRow: {
     flexDirection: "row",
@@ -258,28 +359,58 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.text.secondary,
   },
-  actions: {
+  downloadBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
     width: "100%",
-    gap: 12,
-  },
-  primaryBtn: {
     backgroundColor: Colors.primary,
     borderRadius: 14,
-    paddingVertical: 15,
-    alignItems: "center",
+    paddingVertical: 16,
+    marginBottom: 14,
+    ...Platform.select({
+      ios: {
+        shadowColor: Colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 10,
+      },
+      android: { elevation: 4 },
+      web: {
+        boxShadow: `0 4px 16px ${Colors.primary}4D`,
+      },
+    }),
   },
-  primaryBtnText: {
+  downloadBtnText: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 16,
+    color: "#fff",
+  },
+  secondaryActions: {
+    width: "100%",
+    gap: 8,
+  },
+  outlineBtn: {
+    borderRadius: 14,
+    paddingVertical: 13,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.white,
+  },
+  outlineBtnText: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 15,
-    color: "#fff",
+    color: Colors.text.primary,
   },
   ghostBtn: {
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   ghostBtnText: {
     fontFamily: "Inter_500Medium",
-    fontSize: 15,
-    color: Colors.text.secondary,
+    fontSize: 14,
+    color: Colors.text.muted,
   },
 });
