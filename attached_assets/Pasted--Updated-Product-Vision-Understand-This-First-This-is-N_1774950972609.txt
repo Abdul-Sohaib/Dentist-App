@@ -1,0 +1,159 @@
+🧠 🔥 Updated Product Vision (Understand This First)
+
+👉 This is NOT “find dentists” app anymore
+👉 This is:
+
+A personal clinic management app for a single dentist
+
+Core idea:
+One dentist = one account
+Dentist manages:
+Patients (customers)
+Appointments
+Schedule
+Basic analytics
+🚀 🎯 MASTER PROMPT (Use this to update your codebase)
+Writing
+
+Build a modern, production-ready React Native (Expo) Dentist Clinic Management App designed for a single dentist user (not a marketplace).
+
+🧩 Core Concept
+
+This app is a personal CRM + booking system for a dentist where:
+
+Only one dentist logs in per app instance
+Dentist manages their own patients and appointments
+Customers (patients) do not have accounts — they are managed by the dentist
+🔐 Authentication System (Dentist Only)
+Implement Dentist Signup & Login
+Store dentist profile in AsyncStorage (or backend if connected)
+Fields:
+Name
+Clinic Name
+Phone
+Email
+Password
+Working Hours
+Working Days
+Slot Duration
+Break Times
+Bio
+Flow:
+First time → Signup screen
+After signup → Auto login
+Returning user → Login screen
+Maintain session using AsyncStorage
+👨‍⚕️ Dentist Dashboard (Main Screen)
+
+Design a clean, modern dashboard with:
+
+Sections:
+👋 Welcome Header (Dentist Name)
+📅 Today’s Appointments (list view)
+📊 Quick Stats Cards:
+Total Patients
+Total Appointments
+Pending Appointments
+Completed Appointments
+➕ Quick Actions:
+Add Patient
+Book Appointment
+View Calendar
+👥 Patient Management (Core CRM Feature)
+
+Create a Patients Module:
+
+Features:
+Add Patient:
+Name
+Phone
+Problem / Notes
+Last Visit Date
+View All Patients (search + filter)
+Patient Profile Screen:
+Details
+Appointment history
+Notes
+📅 Appointment Management
+
+Enhance existing booking logic:
+
+Features:
+Book appointment for a patient
+Auto-generate time slots based on:
+Working hours
+Slot duration
+Breaks
+Appointment Status:
+Pending
+Confirmed
+Completed
+Cancelled
+Calendar View (optional but recommended)
+📊 Analytics (Simple but Useful)
+
+Create a basic analytics screen:
+
+Metrics:
+Total Patients
+Appointments per day/week
+Most busy day
+Completion rate
+
+Use simple charts (bar / line)
+
+⚙️ Dentist Profile Settings
+Edit profile
+Update working hours & availability
+Logout button
+🎨 UI/UX Requirements (IMPORTANT)
+Clean, modern, minimal UI
+Mobile-first design
+Soft colors (medical theme: blue/white)
+Smooth navigation (React Navigation / Expo Router)
+Friendly UX:
+Large buttons
+Simple forms
+Clear labels
+No clutter
+🧠 Logic Updates Required
+REMOVE multi-dentist marketplace logic
+Replace:
+dentists[] → currentDentist (single user)
+Introduce:
+patients[]
+Update appointment logic:
+Link appointments to patient instead of customer name only
+💾 Storage
+Use AsyncStorage for:
+Dentist session
+Patients
+Appointments
+🚀 Future Ready (Optional Backend)
+
+Structure code so it can later connect to:
+
+Node.js backend (Express)
+MongoDB / PostgreSQL
+📦 Code Quality
+Use TypeScript strictly
+Modular structure:
+context/
+screens/
+components/
+utils/
+Clean reusable hooks
+🎯 Goal
+
+Build an app that feels like:
+
+A personal assistant for a dentist
+Fast, simple, and efficient
+Easy enough for non-tech users
+💡 Bonus Features (if time permits)
+WhatsApp reminder integration
+Export patient data (PDF)
+Push notifications
+Dark mode
+
+Make the app highly intuitive so that a dentist can manage their entire clinic operations from their phone without confusion.

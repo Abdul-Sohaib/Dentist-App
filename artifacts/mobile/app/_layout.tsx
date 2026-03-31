@@ -22,16 +22,19 @@ const queryClient = new QueryClient();
 
 function RootLayoutNav() {
   return (
-    <Stack screenOptions={{ headerShown: false }}>
+    <Stack screenOptions={{ headerShown: false, animation: "fade" }}>
       <Stack.Screen name="index" />
-      <Stack.Screen name="customer/dentists" />
-      <Stack.Screen name="customer/dentist-profile" />
-      <Stack.Screen name="customer/booking" />
-      <Stack.Screen name="customer/success" />
-      <Stack.Screen name="dentist/login" />
-      <Stack.Screen name="dentist/dashboard" />
-      <Stack.Screen name="dentist/appointments" />
-      <Stack.Screen name="dentist/slots" />
+      <Stack.Screen name="auth/login" />
+      <Stack.Screen name="auth/signup" />
+      <Stack.Screen name="dashboard" />
+      <Stack.Screen name="patients/index" />
+      <Stack.Screen name="patients/add" />
+      <Stack.Screen name="patients/[id]" />
+      <Stack.Screen name="appointments/index" />
+      <Stack.Screen name="appointments/book" />
+      <Stack.Screen name="appointments/success" />
+      <Stack.Screen name="analytics" />
+      <Stack.Screen name="settings" />
     </Stack>
   );
 }

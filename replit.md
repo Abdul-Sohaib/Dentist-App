@@ -10,83 +10,87 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Node.js version**: 24
 - **Package manager**: pnpm
 - **TypeScript version**: 5.9
-- **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
 
 ## Structure
 
 ```text
 artifacts-monorepo/
 ├── artifacts/              # Deployable applications
-│   ├── api-server/         # Express API server
+│   ├── api-server/         # Express API server (unused by mobile app)
 │   ├── mobile/             # Expo mobile app (DentBook)
 │   └── mockup-sandbox/     # Canvas design sandbox
 ├── lib/                    # Shared libraries
-│   ├── api-spec/           # OpenAPI spec + Orval codegen config
-│   ├── api-client-react/   # Generated React Query hooks
-│   ├── api-zod/            # Generated Zod schemas from OpenAPI
-│   └── db/                 # Drizzle ORM schema + DB connection
-├── scripts/                # Utility scripts
-├── pnpm-workspace.yaml
-├── tsconfig.base.json
-├── tsconfig.json
-└── package.json
+└── ...
 ```
 
 ## DentBook Mobile App (artifacts/mobile)
 
-A full-featured dentist appointment booking mobile app built with Expo + React Native.
+A single-dentist clinic management app built with Expo + React Native.
+
+### Product Vision
+- **NOT** a multi-dentist marketplace
+- A **personal CRM + booking system** for one dentist
+- Dentist manages their own patients and appointments
+- Patients do not have accounts — managed by the dentist
 
 ### Features
-- **Customer flow** (no login): Browse dentists, view available time slots on a calendar, book appointments
-- **Dentist flow** (login required): Dashboard with today/upcoming appointments, accept/reject bookings, slot management
+- **Auth**: Signup / Login with session persistence via AsyncStorage
+- **Dashboard**: Welcome header, today's appointments, stats cards, quick actions
+- **Patient CRM**: Add, search, view, edit, delete patients; see appointment history
+- **Appointments**: Book for a patient, calendar slot picker, status management (confirm/complete/cancel)
+- **Analytics**: Stats overview, bar charts by day-of-week and status, week-over-week comparison
+- **Settings**: Edit profile, clinic info, working hours, slot duration, working days
+- **Ticket Download**: PDF appointment ticket via expo-print + expo-sharing
 
 ### Architecture
-- **Storage**: AsyncStorage for all local persistence
-- **State**: React Context (AppContext) with full CRUD operations
-- **Navigation**: Expo Router file-based routing
+- **Storage**: AsyncStorage (no backend)
+- **State**: React Context (`AppContext`) — single source of truth
+- **Navigation**: Expo Router Stack + custom `BottomNav` component
 - **Theme**: Medical clean — white, blue (#1A7FD4), soft green (#2ECC9C)
 
+### Navigation Structure
+```
+/ (index)          → redirects based on session
+/auth/login        → login screen
+/auth/signup       → signup screen
+/dashboard         → main dashboard (BottomNav tab 1)
+/patients          → patient list (BottomNav tab 2)
+/patients/add      → add patient form
+/patients/[id]     → patient profile + history
+/appointments      → all appointments (BottomNav tab 3)
+/appointments/book → book appointment (calendar + slot picker)
+/appointments/success → booking success + PDF ticket download
+/analytics         → analytics charts (BottomNav tab 4)
+/settings          → profile settings + logout (BottomNav tab 5)
+```
+
 ### Key Files
-- `app/index.tsx` — Entry screen (Customer / Dentist selector)
-- `app/customer/dentists.tsx` — Dentist list with search
-- `app/customer/dentist-profile.tsx` — Calendar slot selector
-- `app/customer/booking.tsx` — Patient details form
-- `app/customer/success.tsx` — Booking confirmation
-- `app/dentist/login.tsx` — Login / Signup for dentists
-- `app/dentist/dashboard.tsx` — Today's appointments + stats
-- `app/dentist/appointments.tsx` — All appointments with filter
-- `app/dentist/slots.tsx` — Working hours & slot management
-- `context/AppContext.tsx` — Global state, business logic, seed data
-- `components/UI.tsx` — Shared UI components (Button, Input, Card, StatusBadge)
-- `constants/colors.ts` — Medical theme color palette
+- `app/index.tsx` — Session check → redirect
+- `app/auth/login.tsx` — Login
+- `app/auth/signup.tsx` — Signup
+- `app/dashboard.tsx` — Main dashboard
+- `app/patients/index.tsx` — Patient list
+- `app/patients/add.tsx` — Add patient
+- `app/patients/[id].tsx` — Patient profile
+- `app/appointments/index.tsx` — All appointments with filter
+- `app/appointments/book.tsx` — Book appointment
+- `app/appointments/success.tsx` — Success + download ticket
+- `app/analytics.tsx` — Analytics dashboard
+- `app/settings.tsx` — Settings + logout
+- `context/AppContext.tsx` — All state, CRUD, business logic, seed data
+- `components/UI.tsx` — Button, Input, Card, StatusBadge, EmptyState
+- `components/BottomNav.tsx` — Bottom navigation bar
+- `utils/ticketPDF.ts` — PDF appointment ticket generator
 
 ### Demo Credentials
-- Email: `sarah@brightsmile.com` / Password: `password123`
-- Other dentists: james@clearpath.com, priya@pediatrident.com, marcus@midtownimplant.com
+- Email: `demo@dentbook.com` / Password: `demo123`
+- Loads with 6 pre-seeded patients and 9 appointments
 
-## TypeScript & Composite Projects
-
-Every package extends `tsconfig.base.json` which sets `composite: true`. The root `tsconfig.json` lists all packages as project references.
-
-## Root Scripts
-
-- `pnpm run build` — runs `typecheck` first, then recursively runs `build` in all packages
-- `pnpm run typecheck` — runs `tsc --build --emitDeclarationOnly` using project references
-
-## Packages
-
-### `artifacts/api-server` (`@workspace/api-server`)
-
-Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` for validation.
-
-### `lib/db` (`@workspace/db`)
-
-Database layer using Drizzle ORM with PostgreSQL.
-
-### `lib/api-spec` (`@workspace/api-spec`)
-
-Owns the OpenAPI 3.1 spec. Run codegen: `pnpm --filter @workspace/api-spec run codegen`
+### Data Models
+```typescript
+DentistProfile { id, name, clinicName, location, phone, email, password,
+                 workingHours, workingDays, slotDuration, breaks, bio }
+Patient        { id, name, phone, notes, createdAt }
+Appointment    { id, patientId, date, time, problem,
+                 status: "pending"|"confirmed"|"completed"|"cancelled", createdAt }
+```

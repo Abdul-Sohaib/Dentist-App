@@ -22,12 +22,12 @@ const Colors = {
   status: {
     pending: "#F59E0B",
     pendingBg: "#FFFBEB",
-    accepted: "#10B981",
-    acceptedBg: "#ECFDF5",
-    rejected: "#EF4444",
-    rejectedBg: "#FEF2F2",
+    confirmed: "#10B981",
+    confirmedBg: "#ECFDF5",
     completed: "#6366F1",
     completedBg: "#EEF2FF",
+    cancelled: "#EF4444",
+    cancelledBg: "#FEF2F2",
   },
   shadow: {
     color: "#000",
