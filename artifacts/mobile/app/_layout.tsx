@@ -26,6 +26,9 @@ function RootLayoutNav() {
       <Stack.Screen name="index" />
       <Stack.Screen name="auth/login" />
       <Stack.Screen name="auth/signup" />
+      <Stack.Screen name="customer/home" options={{ animation: "slide_from_left" }} />
+      <Stack.Screen name="customer/book" />
+      <Stack.Screen name="customer/success" />
       <Stack.Screen name="dashboard" />
       <Stack.Screen name="patients/index" />
       <Stack.Screen name="patients/add" />

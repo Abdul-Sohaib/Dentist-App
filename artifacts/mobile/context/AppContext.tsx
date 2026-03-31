@@ -20,6 +20,9 @@ export interface DentistProfile {
   slotDuration: number;
   breaks: { start: string; end: string }[];
   bio: string;
+  specialty?: string;
+  experience?: number;
+  rating?: number;
 }
 
 export interface Patient {
@@ -43,6 +46,7 @@ export interface Appointment {
 interface AppContextType {
   isLoading: boolean;
   currentDentist: DentistProfile | null;
+  clinicProfile: DentistProfile;
   patients: Patient[];
   appointments: Appointment[];
   login: (email: string, password: string) => DentistProfile | null;
@@ -53,6 +57,13 @@ interface AppContextType {
   updatePatient: (id: string, data: Partial<Patient>) => void;
   deletePatient: (id: string) => void;
   addAppointment: (data: Omit<Appointment, "id" | "createdAt" | "status">) => Appointment;
+  bookAsCustomer: (data: {
+    name: string;
+    phone: string;
+    problem: string;
+    date: string;
+    time: string;
+  }) => Appointment;
   updateAppointmentStatus: (id: string, status: Appointment["status"]) => void;
   deleteAppointment: (id: string) => void;
   getAvailableSlots: (date: string) => string[];
@@ -81,7 +92,7 @@ function relativeDate(daysFromNow: number): string {
   return d.toISOString().split("T")[0];
 }
 
-const DEMO_DENTIST: DentistProfile = {
+export const DEMO_DENTIST: DentistProfile = {
   id: "demo-dentist",
   name: "Dr. Sarah Mitchell",
   clinicName: "BrightSmile Dental Clinic",
@@ -93,152 +104,51 @@ const DEMO_DENTIST: DentistProfile = {
   workingDays: [1, 2, 3, 4, 5],
   slotDuration: 30,
   breaks: [{ start: "13:00", end: "14:00" }],
-  bio: "Specializing in cosmetic and restorative dental care with a gentle, patient-first approach.",
+  bio: "Specializing in cosmetic and restorative dental care with a gentle, patient-first approach. Board-certified with over 12 years of experience.",
+  specialty: "General & Cosmetic Dentistry",
+  experience: 12,
+  rating: 4.9,
 };
 
 const DEMO_PATIENTS: Patient[] = [
-  {
-    id: "p1",
-    name: "John Anderson",
-    phone: "+1 (555) 234-5678",
-    notes: "Severe tooth pain, lower right molar. Allergic to penicillin.",
-    createdAt: new Date(Date.now() - 30 * 86400000).toISOString(),
-  },
-  {
-    id: "p2",
-    name: "Emma Williams",
-    phone: "+1 (555) 345-6789",
-    notes: "Routine checkup. Has dental anxiety, needs extra care.",
-    createdAt: new Date(Date.now() - 45 * 86400000).toISOString(),
-  },
-  {
-    id: "p3",
-    name: "Michael Brown",
-    phone: "+1 (555) 456-7890",
-    notes: "Teeth whitening treatment. No known allergies.",
-    createdAt: new Date(Date.now() - 20 * 86400000).toISOString(),
-  },
-  {
-    id: "p4",
-    name: "Sophia Johnson",
-    phone: "+1 (555) 567-8901",
-    notes: "Braces consultation and follow-up. Teenager patient.",
-    createdAt: new Date(Date.now() - 60 * 86400000).toISOString(),
-  },
-  {
-    id: "p5",
-    name: "Daniel Davis",
-    phone: "+1 (555) 678-9012",
-    notes: "Wisdom tooth extraction. Previously done under local anesthesia.",
-    createdAt: new Date(Date.now() - 10 * 86400000).toISOString(),
-  },
-  {
-    id: "p6",
-    name: "Olivia Martinez",
-    phone: "+1 (555) 789-0123",
-    notes: "Routine cleaning and X-ray. Healthy patient.",
-    createdAt: new Date(Date.now() - 5 * 86400000).toISOString(),
-  },
+  { id: "p1", name: "John Anderson", phone: "+1 (555) 234-5678", notes: "Severe tooth pain, lower right molar. Allergic to penicillin.", createdAt: new Date(Date.now() - 30 * 86400000).toISOString() },
+  { id: "p2", name: "Emma Williams", phone: "+1 (555) 345-6789", notes: "Routine checkup. Has dental anxiety, needs extra care.", createdAt: new Date(Date.now() - 45 * 86400000).toISOString() },
+  { id: "p3", name: "Michael Brown", phone: "+1 (555) 456-7890", notes: "Teeth whitening treatment. No known allergies.", createdAt: new Date(Date.now() - 20 * 86400000).toISOString() },
+  { id: "p4", name: "Sophia Johnson", phone: "+1 (555) 567-8901", notes: "Braces consultation and follow-up. Teenager patient.", createdAt: new Date(Date.now() - 60 * 86400000).toISOString() },
+  { id: "p5", name: "Daniel Davis", phone: "+1 (555) 678-9012", notes: "Wisdom tooth extraction. Previously done under local anesthesia.", createdAt: new Date(Date.now() - 10 * 86400000).toISOString() },
+  { id: "p6", name: "Olivia Martinez", phone: "+1 (555) 789-0123", notes: "Routine cleaning and X-ray. Healthy patient.", createdAt: new Date(Date.now() - 5 * 86400000).toISOString() },
 ];
 
 const DEMO_APPOINTMENTS: Appointment[] = [
-  {
-    id: "a1",
-    patientId: "p1",
-    date: relativeDate(0),
-    time: "09:00",
-    problem: "Tooth pain - lower right molar",
-    status: "confirmed",
-    createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
-  },
-  {
-    id: "a2",
-    patientId: "p2",
-    date: relativeDate(0),
-    time: "10:00",
-    problem: "Routine checkup and cleaning",
-    status: "pending",
-    createdAt: new Date(Date.now() - 1 * 86400000).toISOString(),
-  },
-  {
-    id: "a3",
-    patientId: "p3",
-    date: relativeDate(0),
-    time: "11:00",
-    problem: "Teeth whitening session 2",
-    status: "completed",
-    createdAt: new Date(Date.now() - 3 * 86400000).toISOString(),
-  },
-  {
-    id: "a4",
-    patientId: "p4",
-    date: relativeDate(1),
-    time: "09:30",
-    problem: "Braces adjustment",
-    status: "pending",
-    createdAt: new Date(Date.now() - 1 * 86400000).toISOString(),
-  },
-  {
-    id: "a5",
-    patientId: "p5",
-    date: relativeDate(2),
-    time: "14:00",
-    problem: "Wisdom tooth consultation",
-    status: "confirmed",
-    createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
-  },
-  {
-    id: "a6",
-    patientId: "p6",
-    date: relativeDate(3),
-    time: "10:30",
-    problem: "Routine cleaning",
-    status: "pending",
-    createdAt: new Date(Date.now() - 1 * 86400000).toISOString(),
-  },
-  {
-    id: "a7",
-    patientId: "p1",
-    date: relativeDate(-7),
-    time: "09:00",
-    problem: "Initial consultation for tooth pain",
-    status: "completed",
-    createdAt: new Date(Date.now() - 10 * 86400000).toISOString(),
-  },
-  {
-    id: "a8",
-    patientId: "p3",
-    date: relativeDate(-5),
-    time: "11:00",
-    problem: "Teeth whitening session 1",
-    status: "completed",
-    createdAt: new Date(Date.now() - 8 * 86400000).toISOString(),
-  },
-  {
-    id: "a9",
-    patientId: "p2",
-    date: relativeDate(-3),
-    time: "14:30",
-    problem: "Follow-up checkup",
-    status: "cancelled",
-    createdAt: new Date(Date.now() - 6 * 86400000).toISOString(),
-  },
+  { id: "a1", patientId: "p1", date: relativeDate(0), time: "09:00", problem: "Tooth pain - lower right molar", status: "confirmed", createdAt: new Date(Date.now() - 2 * 86400000).toISOString() },
+  { id: "a2", patientId: "p2", date: relativeDate(0), time: "10:00", problem: "Routine checkup and cleaning", status: "pending", createdAt: new Date(Date.now() - 1 * 86400000).toISOString() },
+  { id: "a3", patientId: "p3", date: relativeDate(0), time: "11:00", problem: "Teeth whitening session 2", status: "completed", createdAt: new Date(Date.now() - 3 * 86400000).toISOString() },
+  { id: "a4", patientId: "p4", date: relativeDate(1), time: "09:30", problem: "Braces adjustment", status: "pending", createdAt: new Date(Date.now() - 1 * 86400000).toISOString() },
+  { id: "a5", patientId: "p5", date: relativeDate(2), time: "14:00", problem: "Wisdom tooth consultation", status: "confirmed", createdAt: new Date(Date.now() - 2 * 86400000).toISOString() },
+  { id: "a6", patientId: "p6", date: relativeDate(3), time: "10:30", problem: "Routine cleaning", status: "pending", createdAt: new Date(Date.now() - 1 * 86400000).toISOString() },
+  { id: "a7", patientId: "p1", date: relativeDate(-7), time: "09:00", problem: "Initial consultation for tooth pain", status: "completed", createdAt: new Date(Date.now() - 10 * 86400000).toISOString() },
+  { id: "a8", patientId: "p3", date: relativeDate(-5), time: "11:00", problem: "Teeth whitening session 1", status: "completed", createdAt: new Date(Date.now() - 8 * 86400000).toISOString() },
+  { id: "a9", patientId: "p2", date: relativeDate(-3), time: "14:30", problem: "Follow-up checkup", status: "cancelled", createdAt: new Date(Date.now() - 6 * 86400000).toISOString() },
 ];
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [currentDentist, setCurrentDentist] = useState<DentistProfile | null>(null);
+  const [clinicProfile, setClinicProfile] = useState<DentistProfile>(DEMO_DENTIST);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
 
   useEffect(() => {
     (async () => {
       try {
-        const [storedDentist, storedPatients, storedAppointments] = await Promise.all([
-          AsyncStorage.getItem("currentDentist"),
-          AsyncStorage.getItem("patients"),
-          AsyncStorage.getItem("appointments"),
-        ]);
+        const [storedDentist, storedClinic, storedPatients, storedAppointments] =
+          await Promise.all([
+            AsyncStorage.getItem("currentDentist"),
+            AsyncStorage.getItem("clinicProfile"),
+            AsyncStorage.getItem("patients"),
+            AsyncStorage.getItem("appointments"),
+          ]);
+        if (storedClinic) setClinicProfile(JSON.parse(storedClinic));
         if (storedDentist) setCurrentDentist(JSON.parse(storedDentist));
         if (storedPatients) setPatients(JSON.parse(storedPatients));
         if (storedAppointments) setAppointments(JSON.parse(storedAppointments));
@@ -247,54 +157,57 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
-  const persist = useCallback(async (
-    dentist: DentistProfile | null,
-    pts: Patient[],
-    apts: Appointment[]
-  ) => {
-    const ops = [
-      AsyncStorage.setItem("patients", JSON.stringify(pts)),
-      AsyncStorage.setItem("appointments", JSON.stringify(apts)),
-    ];
-    if (dentist) {
-      ops.push(AsyncStorage.setItem("currentDentist", JSON.stringify(dentist)));
-    } else {
-      ops.push(AsyncStorage.removeItem("currentDentist"));
-    }
-    await Promise.all(ops);
-  }, []);
-
   const login = useCallback((email: string, password: string): DentistProfile | null => {
     const isDemo =
       email.trim().toLowerCase() === DEMO_DENTIST.email &&
       password === DEMO_DENTIST.password;
 
     if (isDemo) {
-      setCurrentDentist(DEMO_DENTIST);
       const pts = DEMO_PATIENTS;
       const apts = DEMO_APPOINTMENTS;
+      setCurrentDentist(DEMO_DENTIST);
+      setClinicProfile(DEMO_DENTIST);
       setPatients(pts);
       setAppointments(apts);
-      persist(DEMO_DENTIST, pts, apts);
+      AsyncStorage.multiSet([
+        ["currentDentist", JSON.stringify(DEMO_DENTIST)],
+        ["clinicProfile", JSON.stringify(DEMO_DENTIST)],
+        ["patients", JSON.stringify(pts)],
+        ["appointments", JSON.stringify(apts)],
+      ]);
       return DEMO_DENTIST;
     }
+
+    const matches =
+      email.trim().toLowerCase() === clinicProfile.email.toLowerCase() &&
+      password === clinicProfile.password;
+
+    if (matches) {
+      setCurrentDentist(clinicProfile);
+      AsyncStorage.setItem("currentDentist", JSON.stringify(clinicProfile));
+      return clinicProfile;
+    }
     return null;
-  }, [persist]);
+  }, [clinicProfile]);
 
   const signup = useCallback((data: Omit<DentistProfile, "id">): DentistProfile => {
     const dentist: DentistProfile = { ...data, id: generateId() };
     setCurrentDentist(dentist);
+    setClinicProfile(dentist);
     setPatients([]);
     setAppointments([]);
-    persist(dentist, [], []);
+    AsyncStorage.multiSet([
+      ["currentDentist", JSON.stringify(dentist)],
+      ["clinicProfile", JSON.stringify(dentist)],
+      ["patients", JSON.stringify([])],
+      ["appointments", JSON.stringify([])],
+    ]);
     return dentist;
-  }, [persist]);
+  }, []);
 
   const logout = useCallback(() => {
     setCurrentDentist(null);
-    setPatients([]);
-    setAppointments([]);
-    AsyncStorage.multiRemove(["currentDentist", "patients", "appointments"]);
+    AsyncStorage.removeItem("currentDentist");
   }, []);
 
   const updateProfile = useCallback((data: Partial<DentistProfile>) => {
@@ -302,6 +215,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!prev) return prev;
       const updated = { ...prev, ...data };
       AsyncStorage.setItem("currentDentist", JSON.stringify(updated));
+      return updated;
+    });
+    setClinicProfile((prev) => {
+      const updated = { ...prev, ...data };
+      AsyncStorage.setItem("clinicProfile", JSON.stringify(updated));
       return updated;
     });
   }, []);
@@ -354,6 +272,55 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return apt;
   }, []);
 
+  const bookAsCustomer = useCallback((data: {
+    name: string;
+    phone: string;
+    problem: string;
+    date: string;
+    time: string;
+  }): Appointment => {
+    let resolvedPatientId = "";
+    let createdPatient: Patient | null = null;
+
+    setPatients((prev) => {
+      const existing = prev.find((p) => p.phone.replace(/\D/g, "") === data.phone.replace(/\D/g, ""));
+      if (existing) {
+        resolvedPatientId = existing.id;
+        return prev;
+      }
+      const newPatient: Patient = {
+        id: generateId(),
+        name: data.name,
+        phone: data.phone,
+        notes: data.problem,
+        createdAt: new Date().toISOString(),
+      };
+      createdPatient = newPatient;
+      resolvedPatientId = newPatient.id;
+      const updated = [newPatient, ...prev];
+      AsyncStorage.setItem("patients", JSON.stringify(updated));
+      return updated;
+    });
+
+    const apt: Appointment = {
+      id: generateId(),
+      patientId: resolvedPatientId,
+      date: data.date,
+      time: data.time,
+      problem: data.problem,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    };
+
+    setAppointments((prev) => {
+      const updated = [apt, ...prev];
+      AsyncStorage.setItem("appointments", JSON.stringify(updated));
+      return updated;
+    });
+
+    return apt;
+  }, []);
+
   const updateAppointmentStatus = useCallback(
     (id: string, status: Appointment["status"]) => {
       setAppointments((prev) => {
@@ -375,19 +342,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const getAvailableSlots = useCallback(
     (date: string): string[] => {
-      if (!currentDentist) return [];
+      const dentist = clinicProfile;
       const d = new Date(date + "T00:00:00");
       const dayOfWeek = d.getDay();
-      if (!currentDentist.workingDays.includes(dayOfWeek)) return [];
+      if (!dentist.workingDays.includes(dayOfWeek)) return [];
 
       const slots: string[] = [];
-      const start = timeToMinutes(currentDentist.workingHours.start);
-      const end = timeToMinutes(currentDentist.workingHours.end);
-      const duration = currentDentist.slotDuration;
+      const start = timeToMinutes(dentist.workingHours.start);
+      const end = timeToMinutes(dentist.workingHours.end);
+      const duration = dentist.slotDuration;
 
       for (let t = start; t + duration <= end; t += duration) {
         const slotStart = minutesToTime(t);
-        const inBreak = currentDentist.breaks.some(
+        const inBreak = dentist.breaks.some(
           (b) => t >= timeToMinutes(b.start) && t < timeToMinutes(b.end)
         );
         if (inBreak) continue;
@@ -401,7 +368,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       return slots;
     },
-    [currentDentist, appointments]
+    [clinicProfile, appointments]
   );
 
   return (
@@ -409,6 +376,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       value={{
         isLoading,
         currentDentist,
+        clinicProfile,
         patients,
         appointments,
         login,
@@ -419,6 +387,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updatePatient,
         deletePatient,
         addAppointment,
+        bookAsCustomer,
         updateAppointmentStatus,
         deleteAppointment,
         getAvailableSlots,

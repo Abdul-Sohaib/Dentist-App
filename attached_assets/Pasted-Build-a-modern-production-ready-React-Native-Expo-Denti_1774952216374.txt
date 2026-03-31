@@ -1,0 +1,156 @@
+Build a modern, production-ready React Native (Expo) Dentist Appointment & Clinic Management App with two user roles:
+
+👨‍⚕️ Dentist (Admin / Clinic Owner)
+👤 Customer (Patient)
+
+The app should behave like a dual-mode system where:
+
+Customers can discover and book appointments
+A single dentist manages all bookings, patients, and clinic operations
+🧩 Core Architecture
+The app starts with a Role Selection / Entry Screen:
+“Continue as Customer”
+“Login as Dentist”
+👤 CUSTOMER SIDE (Default Experience)
+🏠 Customer Dashboard (Main Entry)
+
+Design a clean, friendly UI with:
+
+Sections:
+🦷 Dentist Profile Card:
+Name
+Clinic Name
+Specialty
+Rating
+Experience
+Bio
+📍 Clinic Info:
+Location
+Working Hours
+📅 Book Appointment Button (Primary CTA)
+📅 Appointment Booking Flow
+Steps:
+Select Date
+View Available Time Slots (auto-generated)
+Enter Details:
+Name
+Phone
+Problem / Notes
+Confirm Booking
+📋 Customer Features
+View available slots (based on dentist schedule)
+Book appointment
+View booking confirmation screen
+(Optional) View their recent bookings (local session-based)
+🎨 UX Requirements (Customer)
+Extremely simple UI
+Large buttons
+Minimal steps
+No login required (or optional lightweight login via phone)
+👨‍⚕️ DENTIST SIDE (Admin Panel)
+🔐 Authentication
+Dentist Signup & Login
+Persist session using AsyncStorage
+👨‍⚕️ Dentist Dashboard
+Sections:
+👋 Welcome Header
+📅 Today’s Appointments
+📊 Stats Cards:
+Total Patients
+Total Appointments
+Pending Requests
+Completed Appointments
+➕ Quick Actions:
+Add Patient
+Manage Appointments
+View Analytics
+👥 Patient Management
+Auto-create patient when a customer books
+View all patients
+Patient profile:
+Details
+Appointment history
+Notes
+📅 Appointment Management (Core)
+View all bookings from customers
+Accept / Reject / Complete appointments
+Filter:
+Pending
+Confirmed
+Completed
+Calendar view (optional)
+📊 Analytics Dashboard
+Total patients
+Daily/weekly bookings
+Peak days
+Completion rate
+⚙️ Settings
+Update profile
+Manage working hours
+Manage slot duration
+Logout
+🔄 Data Flow (IMPORTANT)
+Customer → Dentist Flow:
+Customer books appointment
+Appointment stored in AsyncStorage
+Automatically appears in Dentist Dashboard
+Dentist updates status (Accepted/Rejected/Completed)
+🧠 Logic Architecture Updates
+Replace:
+Multi-dentist system ❌
+Use:
+currentDentist ✅
+patients[] ✅
+appointments[] ✅
+Appointment structure:
+Must include:
+patient info
+dentistId (optional if single)
+status
+💾 Storage
+
+Use AsyncStorage for:
+
+Dentist session
+Patients
+Appointments
+🧱 Folder Structure
+context/
+screens/
+customer/
+dentist/
+components/
+utils/
+hooks/
+🎨 UI/UX Design Rules
+Clean, modern UI (medical theme)
+Blue / white palette
+Smooth navigation (Expo Router)
+Friendly experience for non-tech users
+🚀 Future Scalability
+
+Prepare for backend integration:
+
+Node.js (Express)
+Database (MongoDB / PostgreSQL)
+💡 Advanced Features (Optional)
+WhatsApp reminders
+Push notifications
+Online payments
+Multi-dentist expansion (future SaaS)
+Admin dashboard (web)
+🎯 Final Goal
+
+Create an app that feels like:
+
+For Customers → “Easy booking in 30 seconds”
+For Dentist → “Full clinic control in one app”
+
+The experience should be:
+
+Fast
+Clean
+Intuitive
+Professional
+
+Ensure both roles are clearly separated but connected through shared appointment data.
