@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -74,9 +74,30 @@ export default function BookAppointmentScreen() {
     [calYear, calMonth]
   );
 
-  const availableSlots = useMemo(() => {
-    if (!selectedDate) return [];
-    return getAvailableSlots(selectedDate);
+  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!selectedDate) {
+      setAvailableSlots([]);
+      return;
+    }
+
+    let mounted = true;
+
+    (async () => {
+      setSlotsLoading(true);
+      try {
+        const slots = await getAvailableSlots(selectedDate);
+        if (mounted) setAvailableSlots(slots);
+      } finally {
+        if (mounted) setSlotsLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
   }, [selectedDate, getAvailableSlots]);
 
   const isWorkingDay = (date: Date): boolean => {
@@ -98,7 +119,7 @@ export default function BookAppointmentScreen() {
     if (!validate()) return;
     setLoading(true);
     await new Promise((r) => setTimeout(r, 400));
-    const apt = addAppointment({
+    const apt = await addAppointment({
       patientId: selectedPatientId,
       date: selectedDate,
       time: selectedTime,
@@ -276,7 +297,12 @@ export default function BookAppointmentScreen() {
         {selectedDate ? (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Select Time</Text>
-            {availableSlots.length === 0 ? (
+            {slotsLoading ? (
+              <View style={styles.noSlots}>
+                <Feather name="loader" size={20} color={Colors.text.muted} />
+                <Text style={styles.noSlotsText}>Loading available slots...</Text>
+              </View>
+            ) : availableSlots.length === 0 ? (
               <View style={styles.noSlots}>
                 <Feather name="clock" size={20} color={Colors.text.muted} />
                 <Text style={styles.noSlotsText}>No slots available for this date</Text>
@@ -432,3 +458,6 @@ const styles = StyleSheet.create({
   errText: { fontFamily: "Inter_400Regular", fontSize: 12, color: Colors.status.cancelled },
   bookBtn: { marginTop: 4 },
 });
+
+
+

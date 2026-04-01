@@ -50,9 +50,9 @@ export default function PatientProfileScreen() {
     setEditing(true);
   };
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!editName.trim()) return;
-    updatePatient(id, {
+    await updatePatient(id, {
       name: editName.trim(),
       phone: editPhone.trim(),
       notes: editNotes.trim(),
@@ -61,11 +61,11 @@ export default function PatientProfileScreen() {
     setEditing(false);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (Platform.OS === "web") {
       if (window.confirm(`Delete ${patient?.name}? This will also remove all their appointments.`)) {
-        deletePatient(id);
-        router.replace("/patients");
+        await deletePatient(id);
+        router.replace('/patients');
       }
       return;
     }
@@ -77,9 +77,9 @@ export default function PatientProfileScreen() {
         {
           text: "Delete",
           style: "destructive",
-          onPress: () => {
-            deletePatient(id);
-            router.replace("/patients");
+          onPress: async () => {
+            await deletePatient(id);
+        router.replace('/patients');
           },
         },
       ]
@@ -480,3 +480,6 @@ const styles = StyleSheet.create({
   },
   deleteBtnText: { fontFamily: "Inter_600SemiBold", fontSize: 14, color: Colors.status.cancelled },
 });
+
+
+

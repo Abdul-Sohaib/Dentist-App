@@ -42,9 +42,9 @@ export default function SettingsScreen() {
     );
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name.trim() || !clinicName.trim()) return;
-    updateProfile({
+    await updateProfile({
       name: name.trim(),
       clinicName: clinicName.trim(),
       location: location.trim(),
@@ -59,10 +59,10 @@ export default function SettingsScreen() {
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (Platform.OS === "web") {
       if (window.confirm("Sign out of DentBook?")) {
-        logout();
+        await logout();
         router.replace("/auth/login");
       }
       return;
@@ -72,9 +72,9 @@ export default function SettingsScreen() {
       {
         text: "Sign Out",
         style: "destructive",
-        onPress: () => {
-          logout();
-          router.replace("/auth/login");
+        onPress: async () => {
+          await logout();
+        router.replace("/auth/login");
         },
       },
     ]);
@@ -423,3 +423,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 });
+
+
+
+
+

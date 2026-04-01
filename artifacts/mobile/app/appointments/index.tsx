@@ -55,9 +55,9 @@ export default function AppointmentsScreen() {
     return Array.from(map.entries()).sort(([a], [b]) => b.localeCompare(a));
   }, [filtered]);
 
-  const handleStatus = (id: string, status: Appointment["status"]) => {
+  const handleStatus = async (id: string, status: Appointment["status"]) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    updateAppointmentStatus(id, status);
+    await updateAppointmentStatus(id, status);
   };
 
   return (
@@ -328,3 +328,4 @@ const styles = StyleSheet.create({
   actionTicket: { backgroundColor: Colors.primaryLight },
   actionBtnText: { fontFamily: "Inter_600SemiBold", fontSize: 12 },
 });
+

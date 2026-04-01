@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -69,10 +69,31 @@ export default function CustomerBook() {
   const [submitting, setSubmitting] = useState(false);
 
   const cells = useMemo(() => buildCalendarDays(viewYear, viewMonth), [viewYear, viewMonth]);
-  const availableSlots = useMemo(
-    () => (selectedDate ? getAvailableSlots(selectedDate) : []),
-    [selectedDate, getAvailableSlots]
-  );
+  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!selectedDate) {
+      setAvailableSlots([]);
+      return;
+    }
+
+    let mounted = true;
+
+    (async () => {
+      setSlotsLoading(true);
+      try {
+        const slots = await getAvailableSlots(selectedDate);
+        if (mounted) setAvailableSlots(slots);
+      } finally {
+        if (mounted) setSlotsLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [selectedDate, getAvailableSlots]);
 
   const todayISO = toLocalISO(today);
   const canGoBack = viewYear > today.getFullYear() || viewMonth > today.getMonth();
@@ -113,7 +134,7 @@ export default function CustomerBook() {
     setSubmitting(true);
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      const apt = bookAsCustomer({
+      const apt = await bookAsCustomer({
         name: name.trim(),
         phone: phone.trim(),
         problem: problem.trim(),
@@ -259,7 +280,13 @@ export default function CustomerBook() {
                 <View style={styles.stepBadge}><Text style={styles.stepNum}>2</Text></View>
                 <Text style={styles.sectionTitle}>Pick a Time</Text>
               </View>
-              {availableSlots.length === 0 ? (
+              {slotsLoading ? (
+                <View style={styles.noSlots}>
+                  <Feather name="loader" size={24} color={Colors.text.muted} />
+                  <Text style={styles.noSlotsText}>Loading available slots...</Text>
+                  <Text style={styles.noSlotsHint}>Please wait a moment</Text>
+                </View>
+              ) : availableSlots.length === 0 ? (
                 <View style={styles.noSlots}>
                   <Feather name="clock" size={24} color={Colors.text.muted} />
                   <Text style={styles.noSlotsText}>No available slots for this day</Text>
@@ -606,3 +633,6 @@ const styles = StyleSheet.create({
   bookBtnDisabled: { backgroundColor: Colors.border, shadowOpacity: 0 },
   bookBtnText: { fontFamily: "Inter_700Bold", fontSize: 17, color: "#fff" },
 });
+
+
+

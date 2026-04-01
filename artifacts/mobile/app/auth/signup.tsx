@@ -47,7 +47,7 @@ export default function SignupScreen() {
     if (!validate()) return;
     setLoading(true);
     await new Promise((r) => setTimeout(r, 500));
-    signup({
+    await signup({
       name: name.trim(),
       clinicName: clinicName.trim(),
       location: location.trim() || "Your City",
@@ -58,7 +58,7 @@ export default function SignupScreen() {
       workingHours: { start: "09:00", end: "17:00" },
       workingDays: [1, 2, 3, 4, 5],
       slotDuration: 30,
-      breaks: [{ start: "13:00", end: "14:00" }],
+      breakTimes: [{ start: "13:00", end: "14:00" }],
     });
     setLoading(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -301,3 +301,4 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
 });
+

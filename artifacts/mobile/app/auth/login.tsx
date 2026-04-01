@@ -31,14 +31,14 @@ export default function LoginScreen() {
     if (!password) { setError("Password is required"); return; }
     setLoading(true);
     await new Promise((r) => setTimeout(r, 400));
-    const result = login(email.trim(), password);
+    const result = await login(email.trim(), password);
     setLoading(false);
     if (result) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace("/dashboard");
     } else {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      setError("Invalid email or password. Try demo@dentbook.com / demo123");
+      setError("Invalid email or password");
     }
   };
 
@@ -289,3 +289,4 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
 });
+

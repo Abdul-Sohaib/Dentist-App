@@ -67,7 +67,7 @@ function BarChart({ data, maxVal, color }: {
 }
 
 export default function AnalyticsScreen() {
-  const { appointments, patients } = useApp();
+  const { appointments, patients, analytics } = useApp();
   const insets = useSafeAreaInsets();
   const today = new Date().toISOString().split("T")[0];
   const startOfWeek = (() => {
@@ -87,9 +87,9 @@ export default function AnalyticsScreen() {
   })();
 
   const stats = useMemo(() => {
-    const total = appointments.length;
-    const completed = appointments.filter((a) => a.status === "completed").length;
-    const pending = appointments.filter((a) => a.status === "pending").length;
+    const total = analytics.totalAppointments;
+    const completed = analytics.completedAppointments;
+    const pending = analytics.pendingAppointments;
     const confirmed = appointments.filter((a) => a.status === "confirmed").length;
     const cancelled = appointments.filter((a) => a.status === "cancelled").length;
     const thisWeek = appointments.filter((a) => a.date >= startOfWeek && a.date <= today).length;
@@ -114,7 +114,7 @@ export default function AnalyticsScreen() {
       byDay, maxByDay, busiestDay: DAY_LABELS[busiestDayIdx],
       recentPatients,
     };
-  }, [appointments, patients, today, startOfWeek, startOfLastWeek, endOfLastWeek]);
+  }, [analytics, appointments, patients, today, startOfWeek, startOfLastWeek, endOfLastWeek]);
 
   const dayChartData = DAY_LABELS.map((label, i) => ({
     label,
@@ -376,3 +376,4 @@ const styles = StyleSheet.create({
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { fontFamily: "Inter_400Regular", fontSize: 12, color: Colors.text.secondary },
 });
+

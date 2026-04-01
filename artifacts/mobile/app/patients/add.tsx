@@ -38,7 +38,7 @@ export default function AddPatientScreen() {
     if (!validate()) return;
     setLoading(true);
     await new Promise((r) => setTimeout(r, 300));
-    const patient = addPatient({
+    const patient = await addPatient({
       name: name.trim(),
       phone: phone.trim(),
       notes: notes.trim(),
@@ -209,3 +209,4 @@ const styles = StyleSheet.create({
   form: { gap: 14 },
   saveBtn: { marginTop: 4 },
 });
+
