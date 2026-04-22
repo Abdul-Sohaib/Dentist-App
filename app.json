@@ -1,12 +1,16 @@
 {
   "expo": {
+    "name": "DentBook - Dentist Appointment Booking",
+    "slug": "workspace",
+    "version": "1.0.1",
+    "android": {
+      "package": "dentist_booking_system.app",
+      "versionCode": 2
+    },
     "extra": {
       "eas": {
         "projectId": "d5386d16-05c1-4c22-b109-f21cb0ca20b1"
       }
-    },
-    "android": {
-      "package": "dentist_booking_system.app"
     }
   }
 }
