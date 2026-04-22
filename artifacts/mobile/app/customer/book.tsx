@@ -55,7 +55,7 @@ function toLocalISO(d: Date) {
 }
 
 export default function CustomerBook() {
-  const { clinicProfile, getAvailableSlots, bookAsCustomer } = useApp();
+  const { clinicProfile, getAvailableSlots, bookAsCustomer, currentCustomer } = useApp();
   const insets = useSafeAreaInsets();
 
   const today = new Date();
@@ -63,6 +63,7 @@ export default function CustomerBook() {
   const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  const [bookFor, setBookFor] = useState<"self" | "other">("self");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [problem, setProblem] = useState("");
@@ -71,6 +72,15 @@ export default function CustomerBook() {
   const cells = useMemo(() => buildCalendarDays(viewYear, viewMonth), [viewYear, viewMonth]);
   const [availableSlots, setAvailableSlots] = useState<string[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!currentCustomer) {
+      router.replace("/customer/auth/login");
+      return;
+    }
+    setName(currentCustomer.name);
+    setPhone(currentCustomer.phone);
+  }, [currentCustomer]);
 
   useEffect(() => {
     if (!selectedDate) {
@@ -123,11 +133,24 @@ export default function CustomerBook() {
     return iso < todayISO;
   }
 
-  const canBook = selectedDate && selectedSlot && name.trim() && phone.trim() && problem.trim();
+  const currentName = bookFor === "self" ? currentCustomer?.name ?? "" : name.trim();
+  const currentPhone = bookFor === "self" ? currentCustomer?.phone ?? "" : phone.trim();
+  const canBook = selectedDate && selectedSlot && currentName && currentPhone && problem.trim();
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace("/customer/home");
+  };
 
   async function handleBook() {
+    if (!currentCustomer) {
+      router.replace("/customer/auth/login");
+      return;
+    }
     if (!canBook) return;
-    if (phone.trim().replace(/\D/g, "").length < 7) {
+    if (currentPhone.replace(/\D/g, "").length < 7) {
       Alert.alert("Invalid Phone", "Please enter a valid phone number.");
       return;
     }
@@ -135,20 +158,22 @@ export default function CustomerBook() {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       const apt = await bookAsCustomer({
-        name: name.trim(),
-        phone: phone.trim(),
+        patientName: currentName,
+        phone: currentPhone,
         problem: problem.trim(),
         date: selectedDate!,
         time: selectedSlot!,
+        bookFor,
       });
       router.replace({
         pathname: "/customer/success",
         params: {
           appointmentId: apt.id,
+          ticketId: apt.ticketId ?? "",
           date: selectedDate!,
           time: selectedSlot!,
-          patientName: name.trim(),
-          phone: phone.trim(),
+          patientName: currentName,
+          phone: currentPhone,
           problem: problem.trim(),
           clinicName: clinicProfile.clinicName,
           doctorName: clinicProfile.name,
@@ -180,7 +205,7 @@ export default function CustomerBook() {
         >
           <View style={styles.header}>
             <Pressable
-              onPress={() => router.back()}
+              onPress={handleBack}
               style={({ pressed }) => [styles.backBtn, { opacity: pressed ? 0.7 : 1 }]}
             >
               <Feather name="arrow-left" size={20} color={Colors.text.primary} />
@@ -319,35 +344,63 @@ export default function CustomerBook() {
                 <Text style={styles.sectionTitle}>Your Details</Text>
               </View>
 
-              <View style={styles.formField}>
-                <Text style={styles.label}>Full Name</Text>
-                <View style={styles.inputWrap}>
-                  <Feather name="user" size={16} color={Colors.text.muted} style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.input}
-                    value={name}
-                    onChangeText={setName}
-                    placeholder="Enter your full name"
-                    placeholderTextColor={Colors.text.muted}
-                    autoCapitalize="words"
-                  />
-                </View>
+              <View style={styles.bookingTypeRow}>
+                <Pressable
+                  onPress={() => setBookFor("self")}
+                  style={[styles.bookingTypeBtn, bookFor === "self" && styles.bookingTypeBtnActive]}
+                >
+                  <Text style={[styles.bookingTypeText, bookFor === "self" && styles.bookingTypeTextActive]}>
+                    Book for Me
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setBookFor("other")}
+                  style={[styles.bookingTypeBtn, bookFor === "other" && styles.bookingTypeBtnActive]}
+                >
+                  <Text style={[styles.bookingTypeText, bookFor === "other" && styles.bookingTypeTextActive]}>
+                    Book for Another
+                  </Text>
+                </Pressable>
               </View>
 
-              <View style={styles.formField}>
-                <Text style={styles.label}>Phone Number</Text>
-                <View style={styles.inputWrap}>
-                  <Feather name="phone" size={16} color={Colors.text.muted} style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.input}
-                    value={phone}
-                    onChangeText={setPhone}
-                    placeholder="+1 (555) 000-0000"
-                    placeholderTextColor={Colors.text.muted}
-                    keyboardType="phone-pad"
-                  />
+              {bookFor === "self" ? (
+                <View style={styles.selfBox}>
+                  <Text style={styles.selfText}>Name: {currentCustomer?.name ?? "-"}</Text>
+                  <Text style={styles.selfText}>Phone: {currentCustomer?.phone ?? "-"}</Text>
                 </View>
-              </View>
+              ) : (
+                <>
+                  <View style={styles.formField}>
+                    <Text style={styles.label}>Patient Name</Text>
+                    <View style={styles.inputWrap}>
+                      <Feather name="user" size={16} color={Colors.text.muted} style={styles.inputIcon} />
+                      <TextInput
+                        style={styles.input}
+                        value={name}
+                        onChangeText={setName}
+                        placeholder="Enter patient full name"
+                        placeholderTextColor={Colors.text.muted}
+                        autoCapitalize="words"
+                      />
+                    </View>
+                  </View>
+
+                  <View style={styles.formField}>
+                    <Text style={styles.label}>Patient Phone</Text>
+                    <View style={styles.inputWrap}>
+                      <Feather name="phone" size={16} color={Colors.text.muted} style={styles.inputIcon} />
+                      <TextInput
+                        style={styles.input}
+                        value={phone}
+                        onChangeText={setPhone}
+                        placeholder="+1 (555) 000-0000"
+                        placeholderTextColor={Colors.text.muted}
+                        keyboardType="phone-pad"
+                      />
+                    </View>
+                  </View>
+                </>
+              )}
 
               <View style={styles.formField}>
                 <Text style={styles.label}>Reason / Symptoms</Text>
@@ -384,6 +437,11 @@ export default function CustomerBook() {
                 <Feather name="clock" size={14} color={Colors.text.muted} />
                 <Text style={styles.summaryLabel}>Time</Text>
                 <Text style={styles.summaryValue}>{formatTime(selectedSlot)}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Feather name="user" size={14} color={Colors.text.muted} />
+                <Text style={styles.summaryLabel}>For</Text>
+                <Text style={styles.summaryValue}>{currentName}</Text>
               </View>
             </View>
           )}
@@ -572,6 +630,28 @@ const styles = StyleSheet.create({
   slotText: { fontFamily: "Inter_500Medium", fontSize: 13, color: Colors.text.secondary },
   slotTextSelected: { color: "#fff", fontFamily: "Inter_600SemiBold" },
   formField: { gap: 6 },
+  bookingTypeRow: { flexDirection: "row", gap: 8 },
+  bookingTypeBtn: {
+    flex: 1,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingVertical: 8,
+    alignItems: "center",
+    backgroundColor: Colors.background.secondary,
+  },
+  bookingTypeBtnActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
+  bookingTypeText: { fontFamily: "Inter_500Medium", fontSize: 12, color: Colors.text.secondary },
+  bookingTypeTextActive: { color: Colors.primary, fontFamily: "Inter_600SemiBold" },
+  selfBox: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 10,
+    padding: 10,
+    gap: 4,
+    backgroundColor: Colors.background.secondary,
+  },
+  selfText: { fontFamily: "Inter_500Medium", fontSize: 12, color: Colors.text.secondary },
   label: { fontFamily: "Inter_600SemiBold", fontSize: 13, color: Colors.text.secondary },
   inputWrap: {
     flexDirection: "row",
@@ -630,7 +710,13 @@ const styles = StyleSheet.create({
       web: { boxShadow: `0 6px 20px ${Colors.primary}55` },
     }),
   },
-  bookBtnDisabled: { backgroundColor: Colors.border, shadowOpacity: 0 },
+  bookBtnDisabled: {
+    backgroundColor: Colors.border,
+    ...Platform.select({
+      web: { boxShadow: "none" },
+      default: {},
+    }),
+  },
   bookBtnText: { fontFamily: "Inter_700Bold", fontSize: 17, color: "#fff" },
 });
 

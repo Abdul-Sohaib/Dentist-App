@@ -29,6 +29,7 @@ export default function SettingsScreen() {
   const [clinicName, setClinicName] = useState(currentDentist?.clinicName ?? "");
   const [location, setLocation] = useState(currentDentist?.location ?? "");
   const [phone, setPhone] = useState(currentDentist?.phone ?? "");
+  const [specialty, setSpecialty] = useState(currentDentist?.specialty ?? "");
   const [bio, setBio] = useState(currentDentist?.bio ?? "");
   const [startHour, setStartHour] = useState(currentDentist?.workingHours.start ?? "09:00");
   const [endHour, setEndHour] = useState(currentDentist?.workingHours.end ?? "17:00");
@@ -49,6 +50,7 @@ export default function SettingsScreen() {
       clinicName: clinicName.trim(),
       location: location.trim(),
       phone: phone.trim(),
+      specialty: specialty.trim(),
       bio: bio.trim(),
       workingHours: { start: startHour, end: endHour },
       workingDays,
@@ -125,14 +127,22 @@ export default function SettingsScreen() {
                 keyboardType="phone-pad"
               />
               <Input
-                label="Bio"
+                label="Specialization"
+                icon="award"
+                value={specialty}
+                onChangeText={setSpecialty}
+                autoCapitalize="words"
+                placeholder="e.g. Orthodontics"
+              />
+              <Input
+                label="About Me"
                 icon="file-text"
                 value={bio}
                 onChangeText={setBio}
                 multiline
                 numberOfLines={3}
                 style={{ minHeight: 80, textAlignVertical: "top" }}
-                placeholder="About your practice..."
+                placeholder="Tell patients about your experience and treatment style..."
               />
             </View>
           </View>

@@ -55,6 +55,13 @@ export default function BookAppointmentScreen() {
 
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace("/appointments");
+  };
 
   const selectedPatient = useMemo(
     () => patients.find((p) => p.id === selectedPatientId),
@@ -149,7 +156,7 @@ export default function BookAppointmentScreen() {
     >
       <View style={[styles.headerBar, { paddingTop: Platform.OS === "web" ? 20 : insets.top + 8 }]}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={handleBack}
           style={({ pressed }) => [styles.backBtn, { opacity: pressed ? 0.7 : 1 }]}
         >
           <Feather name="arrow-left" size={20} color={Colors.text.primary} />

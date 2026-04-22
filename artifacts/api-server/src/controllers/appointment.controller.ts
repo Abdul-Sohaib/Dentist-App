@@ -1,16 +1,21 @@
 import type { Response } from "express";
 import Appointment, { APPOINTMENT_STATUSES } from "../models/Appointment";
 import Dentist from "../models/Dentist";
+import NotificationAlert from "../models/NotificationAlert";
 import Patient from "../models/Patient";
 import type { AuthenticatedRequest } from "../types/auth";
 import { generateSlots } from "../utils/slots";
 
-const ACTIVE_BOOKING_STATUSES = ["pending", "confirmed"];
+const ACTIVE_BOOKING_STATUSES = ["pending", "accepted", "confirmed"];
 
 const mapAppointment = (apt: any) => ({
   id: apt._id,
   patientId: String(apt.patientId),
   dentistId: String(apt.dentistId),
+  bookedByCustomerId: apt.bookedByCustomerId ? String(apt.bookedByCustomerId) : "",
+  ticketId: apt.ticketId ?? "",
+  bookedForName: apt.bookedForName ?? "",
+  bookedForPhone: apt.bookedForPhone ?? "",
   date: apt.date,
   timeSlot: apt.timeSlot,
   time: apt.timeSlot,
@@ -20,6 +25,27 @@ const mapAppointment = (apt: any) => ({
   createdAt: apt.createdAt,
   updatedAt: apt.updatedAt,
 });
+
+const toCustomerStatus = (status: string): "pending" | "accepted" | "rejected" | "completed" => {
+  if (status === "accepted" || status === "confirmed") return "accepted";
+  if (status === "rejected" || status === "cancelled") return "rejected";
+  if (status === "completed") return "completed";
+  return "pending";
+};
+
+const generateTicketId = async () => {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const random = Math.random().toString(36).slice(2, 8).toUpperCase();
+    const ticketId = `DB-${Date.now().toString(36).toUpperCase()}-${random}`;
+    const existing = await Appointment.findOne({ ticketId }).select("_id");
+
+    if (!existing) {
+      return ticketId;
+    }
+  }
+
+  throw new Error("Unable to generate unique ticket ID");
+};
 
 const isSlotAvailable = async (dentistId: string, date: string, timeSlot: string) => {
   const existing = await Appointment.findOne({
@@ -55,6 +81,9 @@ export const createAppointment = async (req: AuthenticatedRequest, res: Response
     const appointment = await Appointment.create({
       patientId,
       dentistId: req.dentistId,
+      ticketId: await generateTicketId(),
+      bookedForName: patient.name,
+      bookedForPhone: patient.phone,
       date,
       timeSlot,
       reason: reason ?? problem ?? "",
@@ -104,6 +133,40 @@ export const updateAppointmentStatus = async (req: AuthenticatedRequest, res: Re
 
     if (!appointment) {
       return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    const customerId = appointment.bookedByCustomerId ? String(appointment.bookedByCustomerId) : "";
+    const customerStatus = toCustomerStatus(status);
+
+    if (customerId && ["accepted", "rejected", "completed"].includes(customerStatus)) {
+      const notificationType =
+        customerStatus === "accepted"
+          ? "appointment_accepted"
+          : customerStatus === "rejected"
+          ? "appointment_rejected"
+          : "appointment_completed";
+      const title =
+        customerStatus === "accepted"
+          ? "Appointment accepted"
+          : customerStatus === "rejected"
+          ? "Appointment rejected"
+          : "Appointment completed";
+      const message =
+        customerStatus === "accepted"
+          ? `Your appointment ${appointment.ticketId} has been accepted by the clinic.`
+          : customerStatus === "rejected"
+          ? `Your appointment ${appointment.ticketId} has been rejected by the clinic.`
+          : `Your appointment ${appointment.ticketId} has been marked as completed.`;
+
+      await NotificationAlert.create({
+        customerId,
+        dentistId: appointment.dentistId,
+        appointmentId: appointment._id,
+        type: notificationType,
+        title,
+        message,
+        deliveredAt: new Date(),
+      });
     }
 
     return res.status(200).json({

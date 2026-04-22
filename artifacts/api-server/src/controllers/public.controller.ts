@@ -1,6 +1,5 @@
 import type { Request, Response } from "express";
 import Dentist from "../models/Dentist";
-import Patient from "../models/Patient";
 import Appointment from "../models/Appointment";
 import { generateSlots } from "../utils/slots";
 import { dbUnavailableMessage, isMongoConnectivityError } from "../utils/db-errors";
@@ -85,69 +84,7 @@ export const getPublicAvailableSlots = async (req: Request, res: Response) => {
 };
 
 export const bookAppointmentPublic = async (req: Request, res: Response) => {
-  try {
-    const { name, phone, date, timeSlot, reason, problem } = req.body;
-
-    if (!name || !phone || !date || !timeSlot) {
-      return res.status(400).json({ message: "name, phone, date and timeSlot are required" });
-    }
-
-    const dentist = await getSingleDentist();
-
-    if (!dentist) {
-      return res.status(404).json({ message: "Clinic not configured yet" });
-    }
-
-    const existing = await Appointment.findOne({
-      dentistId: dentist._id,
-      date,
-      timeSlot,
-      status: { $in: ACTIVE_BOOKING_STATUSES },
-    });
-
-    if (existing) {
-      return res.status(409).json({ message: "Selected slot is already booked" });
-    }
-
-    let patient = await Patient.findOne({ dentistId: dentist._id, phone });
-
-    if (!patient) {
-      patient = await Patient.create({
-        name,
-        phone,
-        notes: reason ?? problem ?? "",
-        dentistId: dentist._id,
-        lastVisit: "",
-      });
-    }
-
-    const appointment = await Appointment.create({
-      patientId: patient._id,
-      dentistId: dentist._id,
-      date,
-      timeSlot,
-      reason: reason ?? problem ?? "",
-      status: "pending",
-    });
-
-    return res.status(201).json({
-      message: "Appointment booked successfully",
-      appointment: {
-        id: String(appointment._id),
-        patientId: String(patient._id),
-        dentistId: String(dentist._id),
-        date: appointment.date,
-        timeSlot: appointment.timeSlot,
-        time: appointment.timeSlot,
-        reason: appointment.reason,
-        problem: appointment.reason,
-        status: appointment.status,
-      },
-    });
-  } catch (error) {
-    if (isMongoConnectivityError(error)) {
-      return res.status(503).json({ message: dbUnavailableMessage });
-    }
-    return res.status(500).json({ message: "Failed to book appointment", error: String(error) });
-  }
+  return res.status(403).json({
+    message: "Guest booking is disabled. Please register or login to book an appointment.",
+  });
 };

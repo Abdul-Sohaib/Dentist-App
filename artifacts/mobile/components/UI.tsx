@@ -152,8 +152,12 @@ export function StatusBadge({ status }: StatusBadgeProps) {
   const label =
     status === "pending"
       ? "Pending"
+      : status === "accepted"
+      ? "Accepted"
       : status === "confirmed"
       ? "Confirmed"
+      : status === "rejected"
+      ? "Rejected"
       : status === "completed"
       ? "Completed"
       : "Cancelled";
@@ -161,8 +165,12 @@ export function StatusBadge({ status }: StatusBadgeProps) {
   const bg =
     status === "pending"
       ? Colors.status.pendingBg
+      : status === "accepted"
+      ? Colors.status.confirmedBg
       : status === "confirmed"
       ? Colors.status.confirmedBg
+      : status === "rejected"
+      ? Colors.status.cancelledBg
       : status === "completed"
       ? Colors.status.completedBg
       : Colors.status.cancelledBg;
@@ -170,8 +178,12 @@ export function StatusBadge({ status }: StatusBadgeProps) {
   const color =
     status === "pending"
       ? Colors.status.pending
+      : status === "accepted"
+      ? Colors.status.confirmed
       : status === "confirmed"
       ? Colors.status.confirmed
+      : status === "rejected"
+      ? Colors.status.cancelled
       : status === "completed"
       ? Colors.status.completed
       : Colors.status.cancelled;
@@ -179,8 +191,12 @@ export function StatusBadge({ status }: StatusBadgeProps) {
   const dot =
     status === "pending"
       ? "clock"
+      : status === "accepted"
+      ? "check-circle"
       : status === "confirmed"
       ? "check-circle"
+      : status === "rejected"
+      ? "x-circle"
       : status === "completed"
       ? "check"
       : "x-circle";

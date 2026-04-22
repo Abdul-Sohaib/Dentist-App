@@ -1,7 +1,8 @@
 import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React from "react";
+import React, { useEffect } from "react";
 import {
+  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -13,70 +14,84 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
 
-function Stars({ rating }: { rating: number }) {
-  return (
-    <View style={{ flexDirection: "row", gap: 3, alignItems: "center" }}>
-      {[1, 2, 3, 4, 5].map((s) => (
-        <Feather
-          key={s}
-          name="star"
-          size={14}
-          color={s <= Math.round(rating) ? "#F59E0B" : Colors.border}
-        />
-      ))}
-      <Text style={starStyles.label}>{rating.toFixed(1)}</Text>
-    </View>
-  );
+function statusColor(status: string) {
+  if (status === "accepted") return Colors.status.confirmed;
+  if (status === "rejected") return Colors.status.cancelled;
+  if (status === "completed") return Colors.status.completed;
+  return Colors.status.pending;
 }
 
-const starStyles = StyleSheet.create({
-  label: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 13,
-    color: "#F59E0B",
-    marginLeft: 4,
-  },
-});
-
-function InfoRow({ icon, text }: { icon: keyof typeof Feather.glyphMap; text: string }) {
-  return (
-    <View style={infoStyles.row}>
-      <View style={infoStyles.iconWrap}>
-        <Feather name={icon} size={14} color={Colors.primary} />
-      </View>
-      <Text style={infoStyles.text}>{text}</Text>
-    </View>
-  );
-}
-
-const infoStyles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  iconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: Colors.primaryLight,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-    marginTop: 1,
-  },
-  text: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 14,
-    color: Colors.text.secondary,
-    flex: 1,
-    lineHeight: 20,
-  },
-});
-
-export default function CustomerHome() {
-  const { clinicProfile } = useApp();
+export default function CustomerDashboard() {
+  const {
+    currentCustomer,
+    clinicProfile,
+    customerAppointments,
+    customerAlerts,
+    customerLogout,
+    updateCustomerNotificationPermission,
+    refreshCustomerDashboard,
+  } = useApp();
   const insets = useSafeAreaInsets();
 
-  const workingDayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const workDays = clinicProfile.workingDays.map((d) => workingDayNames[d]).join(", ");
-  const hoursText = `${clinicProfile.workingHours.start} – ${clinicProfile.workingHours.end}`;
+  useEffect(() => {
+    if (!currentCustomer) {
+      router.replace("/customer/auth/login");
+      return;
+    }
+
+    if (currentCustomer.notificationPermission === "unknown") {
+      Alert.alert(
+        "Enable Notifications",
+        "Allow appointment updates and reminder alerts?",
+        [
+          {
+            text: "Not now",
+            style: "cancel",
+            onPress: () => {
+              updateCustomerNotificationPermission("denied").catch(() => {});
+            },
+          },
+          {
+            text: "Allow",
+            onPress: async () => {
+              try {
+                const NotificationApi = (globalThis as any)?.Notification;
+                if (NotificationApi?.requestPermission) {
+                  const permission = await NotificationApi.requestPermission();
+                  if (permission === "granted") {
+                    await updateCustomerNotificationPermission("granted");
+                  } else {
+                    await updateCustomerNotificationPermission("denied");
+                  }
+                  return;
+                }
+                await updateCustomerNotificationPermission("granted");
+              } catch {
+                updateCustomerNotificationPermission("denied").catch(() => {});
+              }
+            },
+          },
+        ]
+      );
+    }
+  }, [currentCustomer, updateCustomerNotificationPermission]);
+
+  if (!currentCustomer) return null;
+
+  const upcoming = customerAppointments.filter(
+    (item) => item.status === "pending" || item.status === "accepted"
+  );
+  const recentAlerts = customerAlerts.slice(0, 4);
+  const unreadCount = customerAlerts.length;
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const visitingDays = (clinicProfile.workingDays ?? [])
+    .map((day) => dayNames[day] ?? "")
+    .filter(Boolean)
+    .join(", ");
+  const visitingHours = `${clinicProfile.workingHours?.start ?? "-"} to ${clinicProfile.workingHours?.end ?? "-"}`;
+  const consultationTime = clinicProfile.slotDuration
+    ? `${clinicProfile.slotDuration} minutes per patient`
+    : "-";
 
   return (
     <View style={styles.root}>
@@ -84,287 +99,241 @@ export default function CustomerHome() {
         contentContainerStyle={[
           styles.scroll,
           {
-            paddingTop: Platform.OS === "web" ? 0 : insets.top,
-            paddingBottom: (Platform.OS === "web" ? 20 : insets.bottom) + 100,
+            paddingTop: Platform.OS === "web" ? 24 : insets.top + 8,
+            paddingBottom: (Platform.OS === "web" ? 20 : insets.bottom) + 30,
           },
         ]}
-        showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
+        <View style={styles.headerRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.greeting}>Welcome, {currentCustomer.name}</Text>
+            <Text style={styles.sub}>Manage bookings and alerts in one place</Text>
+          </View>
           <Pressable
-            onPress={() => router.back()}
-            style={({ pressed }) => [styles.backBtn, { opacity: pressed ? 0.7 : 1 }]}
+            onPress={() => router.push("/customer/alerts")}
+            style={({ pressed }) => [styles.bellBtn, { opacity: pressed ? 0.75 : 1 }]}
           >
-            <Feather name="arrow-left" size={20} color={Colors.text.primary} />
-          </Pressable>
-          <Text style={styles.headerTitle}>Dental Clinic</Text>
-          <View style={{ width: 40 }} />
-        </View>
-
-        <View style={styles.heroCard}>
-          <View style={styles.avatarWrap}>
-            <View style={styles.avatar}>
-              <Feather name="user" size={36} color={Colors.primary} />
-            </View>
-            <View style={styles.activeIndicator} />
-          </View>
-
-          <Text style={styles.doctorName}>{clinicProfile.name}</Text>
-          <Text style={styles.clinicName}>{clinicProfile.clinicName}</Text>
-
-          {clinicProfile.specialty ? (
-            <View style={styles.specialtyPill}>
-              <Feather name="award" size={12} color={Colors.secondary} />
-              <Text style={styles.specialtyText}>{clinicProfile.specialty}</Text>
-            </View>
-          ) : null}
-
-          {clinicProfile.rating ? (
-            <View style={{ marginTop: 10 }}>
-              <Stars rating={clinicProfile.rating} />
-            </View>
-          ) : null}
-
-          {clinicProfile.experience ? (
-            <View style={styles.expBadge}>
-              <Text style={styles.expText}>
-                {clinicProfile.experience}+ years experience
-              </Text>
-            </View>
-          ) : null}
-        </View>
-
-        {clinicProfile.bio ? (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Feather name="info" size={16} color={Colors.primary} />
-              <Text style={styles.sectionTitle}>About</Text>
-            </View>
-            <Text style={styles.bioText}>{clinicProfile.bio}</Text>
-          </View>
-        ) : null}
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Feather name="map-pin" size={16} color={Colors.primary} />
-            <Text style={styles.sectionTitle}>Clinic Information</Text>
-          </View>
-          <View style={styles.infoList}>
-            <InfoRow icon="map-pin" text={clinicProfile.location} />
-            <InfoRow icon="phone" text={clinicProfile.phone} />
-            <InfoRow icon="clock" text={`${hoursText} · ${workDays}`} />
-            <InfoRow icon="calendar" text={`${clinicProfile.slotDuration}-min appointment slots`} />
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Feather name="check-circle" size={16} color={Colors.secondary} />
-            <Text style={styles.sectionTitle}>Why Choose Us</Text>
-          </View>
-          <View style={styles.featureList}>
-            {[
-              { icon: "shield" as const, text: "Certified & experienced dentist" },
-              { icon: "clock" as const, text: "On-time appointments guaranteed" },
-              { icon: "heart" as const, text: "Gentle, patient-first care" },
-              { icon: "zap" as const, text: "Modern equipment & techniques" },
-            ].map((f, i) => (
-              <View key={i} style={styles.featureRow}>
-                <View style={styles.featureIcon}>
-                  <Feather name={f.icon} size={14} color={Colors.secondary} />
-                </View>
-                <Text style={styles.featureText}>{f.text}</Text>
+            <Feather name="bell" size={16} color={Colors.primary} />
+            {unreadCount > 0 ? (
+              <View style={styles.badgeDot}>
+                <Text style={styles.badgeDotText}>{unreadCount > 9 ? "9+" : String(unreadCount)}</Text>
               </View>
-            ))}
+            ) : null}
+          </Pressable>
+          <Pressable
+            onPress={async () => {
+              await customerLogout();
+              router.replace("/");
+            }}
+            style={styles.logout}
+          >
+            <Feather name="log-out" size={15} color={Colors.text.secondary} />
+          </Pressable>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Available Doctor</Text>
+          <Text style={styles.doctorName}>{clinicProfile.name || "Doctor"}</Text>
+          <Text style={styles.clinicName}>{clinicProfile.clinicName || "Clinic"}</Text>
+          <View style={styles.row}>
+            <Feather name="phone" size={14} color={Colors.text.muted} />
+            <Text style={styles.rowText}>{clinicProfile.phone || "N/A"}</Text>
           </View>
+          <View style={styles.row}>
+            <Feather name="award" size={14} color={Colors.text.muted} />
+            <Text style={styles.rowText}>
+              Specialization: {clinicProfile.specialty?.trim() || "General Dentistry"}
+            </Text>
+          </View>
+          <View style={styles.row}>
+            <Feather name="map-pin" size={14} color={Colors.text.muted} />
+            <Text style={styles.rowText}>{clinicProfile.location || "N/A"}</Text>
+          </View>
+          <View style={styles.row}>
+            <Feather name="calendar" size={14} color={Colors.text.muted} />
+            <Text style={styles.rowText}>Visiting Days: {visitingDays || "N/A"}</Text>
+          </View>
+          <View style={styles.row}>
+            <Feather name="clock" size={14} color={Colors.text.muted} />
+            <Text style={styles.rowText}>Visiting Hours: {visitingHours}</Text>
+          </View>
+          <View style={styles.row}>
+            <Feather name="user-check" size={14} color={Colors.text.muted} />
+            <Text style={styles.rowText}>Consultation Time: {consultationTime}</Text>
+          </View>
+          <Pressable
+            onPress={() => router.push("/customer/book")}
+            style={({ pressed }) => [styles.primaryBtn, { opacity: pressed ? 0.9 : 1 }]}
+          >
+            <Feather name="calendar" size={16} color={Colors.white} />
+            <Text style={styles.primaryBtnText}>Book Appointment</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>About Doctor</Text>
+          <Text style={styles.aboutText}>
+            {clinicProfile.bio?.trim()
+              ? clinicProfile.bio
+              : "Doctor profile description is not added yet."}
+          </Text>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.cardTitle}>Current & Past Appointments</Text>
+            <Pressable onPress={refreshCustomerDashboard}>
+              <Feather name="refresh-cw" size={14} color={Colors.primary} />
+            </Pressable>
+          </View>
+          {customerAppointments.length === 0 ? (
+            <Text style={styles.empty}>No appointments yet</Text>
+          ) : (
+            customerAppointments.slice(0, 8).map((item) => (
+              <View key={item.id} style={styles.appointmentRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.ticket}>{item.ticketId || item.id}</Text>
+                  <Text style={styles.meta}>{item.date} at {item.time}</Text>
+                  <Text style={styles.meta}>{item.bookedForName || currentCustomer.name}</Text>
+                </View>
+                <View style={[styles.badge, { backgroundColor: `${statusColor(item.status)}20` }]}>
+                  <Text style={[styles.badgeText, { color: statusColor(item.status) }]}>
+                    {item.status.toUpperCase()}
+                  </Text>
+                </View>
+              </View>
+            ))
+          )}
+          {upcoming.length > 0 ? (
+            <Text style={styles.upcomingText}>
+              Upcoming appointments: {upcoming.length}
+            </Text>
+          ) : null}
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.cardTitle}>Alerts / Notifications</Text>
+            <Pressable onPress={() => router.push("/customer/alerts")}>
+              <Text style={styles.link}>View all</Text>
+            </Pressable>
+          </View>
+          {recentAlerts.length === 0 ? (
+            <Text style={styles.empty}>No alerts yet</Text>
+          ) : (
+            recentAlerts.map((alert) => (
+              <View key={alert.id} style={styles.alertRow}>
+                <Feather name="bell" size={14} color={Colors.primary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.alertTitle}>{alert.title}</Text>
+                  <Text style={styles.alertMsg}>{alert.message}</Text>
+                </View>
+              </View>
+            ))
+          )}
         </View>
       </ScrollView>
-
-      <View
-        style={[
-          styles.ctaWrap,
-          {
-            paddingBottom: Platform.OS === "web" ? 20 : insets.bottom + 12,
-          },
-        ]}
-      >
-        <Pressable
-          onPress={() => router.push("/customer/book")}
-          style={({ pressed }) => [styles.ctaBtn, { opacity: pressed ? 0.92 : 1 }]}
-        >
-          <Feather name="calendar" size={20} color="#fff" />
-          <Text style={styles.ctaBtnText}>Book Appointment</Text>
-          <Feather name="arrow-right" size={18} color="#fff" />
-        </Pressable>
-      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.background.secondary },
-  scroll: { paddingHorizontal: 20, gap: 16 },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+  scroll: { paddingHorizontal: 20, gap: 14 },
+  headerRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 2 },
+  greeting: { fontFamily: "Inter_700Bold", fontSize: 18, color: Colors.text.primary },
+  sub: { fontFamily: "Inter_400Regular", fontSize: 12, color: Colors.text.secondary },
+  bellBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     backgroundColor: Colors.white,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     borderColor: Colors.border,
+    position: "relative",
   },
-  headerTitle: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 16,
-    color: Colors.text.primary,
-  },
-  heroCard: {
-    backgroundColor: Colors.white,
-    borderRadius: 24,
-    padding: 24,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: Colors.border,
-    ...Platform.select({
-      ios: { shadowColor: Colors.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 24 },
-      android: { elevation: 6 },
-      web: { boxShadow: `0 8px 32px ${Colors.primary}18` },
-    }),
-  },
-  avatarWrap: { position: "relative", marginBottom: 16 },
-  avatar: {
-    width: 96,
-    height: 96,
-    borderRadius: 30,
-    backgroundColor: Colors.primaryLight,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 3,
-    borderColor: Colors.primary + "40",
-  },
-  activeIndicator: {
+  badgeDot: {
     position: "absolute",
-    bottom: 2,
-    right: 2,
-    width: 18,
+    top: -5,
+    right: -6,
+    minWidth: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: Colors.secondary,
-    borderWidth: 2,
-    borderColor: Colors.white,
-  },
-  doctorName: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 22,
-    color: Colors.text.primary,
-    textAlign: "center",
-  },
-  clinicName: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 15,
-    color: Colors.text.secondary,
-    textAlign: "center",
-    marginTop: 2,
-  },
-  specialtyPill: {
-    flexDirection: "row",
+    backgroundColor: Colors.status.cancelled,
     alignItems: "center",
-    gap: 5,
-    backgroundColor: Colors.secondary + "15",
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    marginTop: 10,
+    justifyContent: "center",
+    paddingHorizontal: 4,
   },
-  specialtyText: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 12,
-    color: Colors.secondary,
+  badgeDotText: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 9,
+    color: Colors.white,
   },
-  expBadge: {
-    backgroundColor: Colors.primaryLight,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    marginTop: 10,
-  },
-  expText: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 12,
-    color: Colors.primary,
-  },
-  section: {
+  logout: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     backgroundColor: Colors.white,
-    borderRadius: 20,
-    padding: 20,
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 14,
   },
-  sectionHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
-  sectionTitle: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 16,
-    color: Colors.text.primary,
+  card: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 14,
+    gap: 10,
+    ...Platform.select({
+      ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8 },
+      android: { elevation: 2 },
+      web: { boxShadow: "0 2px 10px rgba(0,0,0,0.06)" },
+    }),
   },
-  bioText: {
+  sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  cardTitle: { fontFamily: "Inter_700Bold", fontSize: 15, color: Colors.text.primary },
+  doctorName: { fontFamily: "Inter_600SemiBold", fontSize: 16, color: Colors.primary },
+  clinicName: { fontFamily: "Inter_500Medium", fontSize: 13, color: Colors.text.secondary },
+  row: { flexDirection: "row", alignItems: "center", gap: 6 },
+  rowText: { fontFamily: "Inter_400Regular", fontSize: 12, color: Colors.text.secondary },
+  aboutText: {
     fontFamily: "Inter_400Regular",
-    fontSize: 14,
+    fontSize: 12,
     color: Colors.text.secondary,
-    lineHeight: 22,
+    lineHeight: 18,
   },
-  infoList: { gap: 12 },
-  featureList: { gap: 10 },
-  featureRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  featureIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: Colors.secondary + "15",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  featureText: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 14,
-    color: Colors.text.secondary,
-  },
-  ctaWrap: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "rgba(248,250,252,0.96)",
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  ctaBtn: {
+  primaryBtn: {
+    marginTop: 2,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 8,
+    borderRadius: 12,
     backgroundColor: Colors.primary,
-    borderRadius: 16,
-    paddingVertical: 16,
-    ...Platform.select({
-      ios: { shadowColor: Colors.primary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 14 },
-      android: { elevation: 8 },
-      web: { boxShadow: `0 6px 20px ${Colors.primary}55` },
-    }),
+    paddingVertical: 12,
   },
-  ctaBtnText: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 17,
-    color: "#fff",
+  primaryBtnText: { fontFamily: "Inter_600SemiBold", fontSize: 14, color: Colors.white },
+  appointmentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 12,
+    padding: 10,
   },
+  ticket: { fontFamily: "Inter_600SemiBold", fontSize: 12, color: Colors.text.primary },
+  meta: { fontFamily: "Inter_400Regular", fontSize: 11, color: Colors.text.secondary },
+  badge: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 },
+  badgeText: { fontFamily: "Inter_600SemiBold", fontSize: 10 },
+  upcomingText: { fontFamily: "Inter_500Medium", fontSize: 12, color: Colors.primary, marginTop: 4 },
+  link: { fontFamily: "Inter_600SemiBold", fontSize: 12, color: Colors.primary },
+  alertRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  alertTitle: { fontFamily: "Inter_600SemiBold", fontSize: 12, color: Colors.text.primary },
+  alertMsg: { fontFamily: "Inter_400Regular", fontSize: 11, color: Colors.text.secondary, lineHeight: 16 },
+  empty: { fontFamily: "Inter_400Regular", fontSize: 12, color: Colors.text.muted },
 });

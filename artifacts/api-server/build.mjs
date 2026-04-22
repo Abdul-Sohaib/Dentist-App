@@ -23,6 +23,11 @@ async function buildAll() {
     logLevel: "info",
 
     external: [
+      // 🔥 ADD THESE (IMPORTANT FIX)
+      "pino",
+      "pino-http",
+      "pino-pretty",
+
       "*.node",
       "sharp",
       "better-sqlite3",
@@ -98,9 +103,6 @@ async function buildAll() {
     ],
 
     sourcemap: "linked",
-
-    // REMOVE plugins completely
-    // plugins: [],
 
     banner: {
       js: `import { createRequire as __bannerCrReq } from 'node:module';

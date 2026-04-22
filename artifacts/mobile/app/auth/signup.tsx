@@ -65,6 +65,14 @@ export default function SignupScreen() {
     router.replace("/dashboard");
   };
 
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace("/auth/login");
+  };
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: Colors.background.secondary }}
@@ -80,7 +88,7 @@ export default function SignupScreen() {
       >
         <View style={styles.header}>
           <Pressable
-            onPress={() => router.back()}
+            onPress={handleBack}
             style={({ pressed }) => [styles.backBtn, { opacity: pressed ? 0.7 : 1 }]}
           >
             <Feather name="arrow-left" size={20} color={Colors.text.primary} />

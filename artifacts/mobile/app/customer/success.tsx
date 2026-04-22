@@ -32,13 +32,15 @@ function formatTime(t: string) {
   return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${ampm}`;
 }
 
-function generateRef(appointmentId: string) {
+function generateRef(appointmentId: string, ticketId?: string) {
+  if (ticketId?.trim()) return ticketId.trim();
   return "DB" + appointmentId.slice(0, 6).toUpperCase();
 }
 
 export default function CustomerSuccess() {
   const params = useLocalSearchParams<{
     appointmentId: string;
+    ticketId?: string;
     date: string;
     time: string;
     patientName: string;
@@ -78,7 +80,7 @@ export default function CustomerSuccess() {
     }
   }
 
-  const refCode = generateRef(params.appointmentId || "abc123");
+  const refCode = generateRef(params.appointmentId || "abc123", params.ticketId);
 
   return (
     <View style={styles.root}>

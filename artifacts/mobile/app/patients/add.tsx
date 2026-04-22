@@ -48,6 +48,14 @@ export default function AddPatientScreen() {
     router.replace(`/patients/${patient.id}`);
   };
 
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace("/patients");
+  };
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: Colors.background.secondary }}
@@ -60,7 +68,7 @@ export default function AddPatientScreen() {
         ]}
       >
         <Pressable
-          onPress={() => router.back()}
+          onPress={handleBack}
           style={({ pressed }) => [styles.backBtn, { opacity: pressed ? 0.7 : 1 }]}
         >
           <Feather name="arrow-left" size={20} color={Colors.text.primary} />

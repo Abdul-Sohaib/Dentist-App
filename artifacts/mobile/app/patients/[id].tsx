@@ -27,6 +27,13 @@ export default function PatientProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { patients, appointments, updatePatient, deletePatient } = useApp();
   const insets = useSafeAreaInsets();
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace("/patients");
+  };
 
   const patient = useMemo(() => patients.find((p) => p.id === id), [patients, id]);
   const patientApts = useMemo(
@@ -65,7 +72,7 @@ export default function PatientProfileScreen() {
     if (Platform.OS === "web") {
       if (window.confirm(`Delete ${patient?.name}? This will also remove all their appointments.`)) {
         await deletePatient(id);
-        router.replace('/patients');
+        router.replace("/patients");
       }
       return;
     }
@@ -79,7 +86,7 @@ export default function PatientProfileScreen() {
           style: "destructive",
           onPress: async () => {
             await deletePatient(id);
-        router.replace('/patients');
+            router.replace("/patients");
           },
         },
       ]
@@ -91,7 +98,7 @@ export default function PatientProfileScreen() {
       <View style={styles.notFound}>
         <Feather name="alert-circle" size={32} color={Colors.text.muted} />
         <Text style={styles.notFoundText}>Patient not found</Text>
-        <Button label="Back" onPress={() => router.back()} variant="outline" />
+        <Button label="Back" onPress={handleBack} variant="outline" />
       </View>
     );
   }
@@ -105,7 +112,13 @@ export default function PatientProfileScreen() {
     <View style={styles.screen}>
       <View style={[styles.headerBar, { paddingTop: Platform.OS === "web" ? 20 : insets.top + 8 }]}>
         <Pressable
-          onPress={() => { if (editing) setEditing(false); else router.back(); }}
+          onPress={() => {
+            if (editing) {
+              setEditing(false);
+              return;
+            }
+            handleBack();
+          }}
           style={({ pressed }) => [styles.backBtn, { opacity: pressed ? 0.7 : 1 }]}
         >
           <Feather name="arrow-left" size={20} color={Colors.text.primary} />

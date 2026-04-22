@@ -15,19 +15,23 @@ import Colors from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
 
 export default function EntryScreen() {
-  const { isLoading, currentDentist } = useApp();
+  const { isLoading, currentDentist, currentCustomer, activeRole } = useApp();
   const insets = useSafeAreaInsets();
   const [redirected, setRedirected] = useState(false);
 
   useEffect(() => {
     if (isLoading || redirected) return;
-    if (currentDentist) {
+    if (currentDentist && activeRole === "dentist") {
       setRedirected(true);
       router.replace("/dashboard");
     }
-  }, [isLoading, currentDentist, redirected]);
+    if (currentCustomer && activeRole === "customer") {
+      setRedirected(true);
+      router.replace("/customer/home");
+    }
+  }, [activeRole, currentCustomer, currentDentist, isLoading, redirected]);
 
-  if (isLoading || currentDentist) {
+  if (isLoading || currentDentist || currentCustomer) {
     return (
       <View style={styles.loader}>
         <View style={styles.logoCircle}>
@@ -62,7 +66,7 @@ export default function EntryScreen() {
         <Pressable
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.push("/customer/home");
+            router.push("/customer/auth/login");
           }}
           style={({ pressed }) => [styles.card, styles.cardPatient, { opacity: pressed ? 0.95 : 1 }]}
         >
@@ -109,7 +113,7 @@ export default function EntryScreen() {
       <View style={styles.footer}>
         <View style={styles.footerPill}>
           <Feather name="shield" size={12} color={Colors.text.muted} />
-          <Text style={styles.footerText}>Secure · Private · No account needed for patients</Text>
+          <Text style={styles.footerText}>Secure · Private · Patient account required for booking</Text>
         </View>
       </View>
     </View>
