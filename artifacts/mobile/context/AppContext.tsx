@@ -9,7 +9,16 @@ import React, {
   useState,
 } from "react";
 import { Asset } from "expo-asset";
+import { AppState } from "react-native";
 import { API_BASE_URL } from "@/constants/api";
+import {
+  cancelNativeReminders,
+  getNativeNotificationPermission,
+  isNativeNotificationSupported,
+  requestNativeNotificationPermission,
+  scheduleNativeReminder,
+  type NotificationPermissionStatus,
+} from "@/utils/nativeNotifications";
 
 export interface DentistProfile {
   id: string;
@@ -94,6 +103,7 @@ interface AppContextType {
   appointments: Appointment[];
   customerAppointments: Appointment[];
   customerAlerts: CustomerAlert[];
+  dentistNotificationPermission: NotificationPermissionStatus;
   analytics: AnalyticsSummary;
   login: (email: string, password: string) => Promise<DentistProfile | null>;
   signup: (data: Omit<DentistProfile, "id"> & { password: string }) => Promise<DentistProfile>;
@@ -121,7 +131,9 @@ interface AppContextType {
   updateAppointmentStatus: (id: string, status: Appointment["status"]) => Promise<void>;
   deleteAppointment: (id: string) => Promise<void>;
   getAvailableSlots: (date: string) => Promise<string[]>;
+  requestDentistNotificationPermission: () => Promise<NotificationPermissionStatus>;
   refreshAll: () => Promise<void>;
+  refreshDentistDashboard: () => Promise<void>;
   refreshCustomerDashboard: () => Promise<void>;
 }
 
@@ -182,6 +194,11 @@ const STORAGE_DENTIST_KEY = "currentDentist";
 const STORAGE_CUSTOMER_TOKEN_KEY = "customerAuthToken";
 const STORAGE_CUSTOMER_KEY = "currentCustomer";
 const STORAGE_ACTIVE_ROLE_KEY = "activeRole";
+const STORAGE_DENTIST_NOTIFICATION_PERMISSION_KEY = "dentistNotificationPermission";
+const STORAGE_LOCAL_REMINDER_IDS_KEY = "localReminderNotificationIds";
+const DENTIST_REFRESH_INTERVAL_MS = 15000;
+const REMINDER_OFFSET_MS = 30 * 60 * 1000;
+const REMINDER_MAX_ITEMS = 40;
 
 const EMPTY_DENTIST: DentistProfile = {
   id: "",
@@ -284,6 +301,42 @@ const toAlert = (raw: unknown): CustomerAlert => {
   };
 };
 
+const parsePermissionStatus = (value: string | null): NotificationPermissionStatus => {
+  if (value === "granted" || value === "denied" || value === "unknown") {
+    return value;
+  }
+  return "unknown";
+};
+
+const appointmentStartDateTime = (date: string, time: string) => {
+  const normalizedTime = /^\d{2}:\d{2}$/.test(time) ? time : "00:00";
+  const candidate = new Date(`${date}T${normalizedTime}:00`);
+
+  if (!Number.isNaN(candidate.getTime())) {
+    return candidate;
+  }
+
+  const fallback = new Date(`${date}T00:00:00`);
+  const [hours, minutes] = normalizedTime.split(":").map((piece) => Number(piece));
+  fallback.setHours(Number.isFinite(hours) ? hours : 0, Number.isFinite(minutes) ? minutes : 0, 0, 0);
+  return fallback;
+};
+
+const reminderTriggerDateTime = (startAt: Date) => {
+  const preferred = new Date(startAt.getTime() - REMINDER_OFFSET_MS);
+  const now = Date.now();
+
+  if (preferred.getTime() > now) {
+    return preferred;
+  }
+
+  if (startAt.getTime() > now) {
+    return new Date(now + 5000);
+  }
+
+  return null;
+};
+
 async function request<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
   const headers = new Headers(options.headers ?? {});
   if (!headers.has("Content-Type") && options.body) {
@@ -320,6 +373,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [customerToken, setCustomerToken] = useState<string | null>(null);
   const [currentDentist, setCurrentDentist] = useState<DentistProfile | null>(null);
   const [currentCustomer, setCurrentCustomer] = useState<CustomerAccount | null>(null);
+  const [dentistNotificationPermission, setDentistNotificationPermission] =
+    useState<NotificationPermissionStatus>("unknown");
   const [clinicProfile, setClinicProfile] = useState<DentistProfile>(EMPTY_DENTIST);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -327,6 +382,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [customerAlerts, setCustomerAlerts] = useState<CustomerAlert[]>([]);
   const initializedAlertIdsRef = useRef<Set<string>>(new Set());
   const hasInitializedAlertTrackingRef = useRef(false);
+  const lastReminderSyncSignatureRef = useRef("");
   const [analytics, setAnalytics] = useState<AnalyticsSummary>(EMPTY_ANALYTICS);
 
   const clearDentistState = useCallback(() => {
@@ -335,6 +391,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setPatients([]);
     setAppointments([]);
     setAnalytics(EMPTY_ANALYTICS);
+    setDentistNotificationPermission("unknown");
   }, []);
 
   const clearCustomerState = useCallback(() => {
@@ -365,6 +422,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setAnalytics(analyticsRes);
   }, []);
 
+  const refreshDentistDashboard = useCallback(async () => {
+    if (!dentistToken) return;
+    try {
+      await fetchDentistProtectedData(dentistToken);
+    } catch (error) {
+      console.warn("Failed to refresh dentist dashboard", error);
+    }
+  }, [dentistToken, fetchDentistProtectedData]);
+
   const fetchCustomerDashboardData = useCallback(async (authToken: string) => {
     const data = await request<{
       customer: unknown;
@@ -391,12 +457,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           storedCustomerToken,
           storedCustomer,
           storedActiveRole,
+          storedDentistNotificationPermission,
         ] = await Promise.all([
           AsyncStorage.getItem(STORAGE_DENTIST_TOKEN_KEY),
           AsyncStorage.getItem(STORAGE_DENTIST_KEY),
           AsyncStorage.getItem(STORAGE_CUSTOMER_TOKEN_KEY),
           AsyncStorage.getItem(STORAGE_CUSTOMER_KEY),
           AsyncStorage.getItem(STORAGE_ACTIVE_ROLE_KEY),
+          AsyncStorage.getItem(STORAGE_DENTIST_NOTIFICATION_PERMISSION_KEY),
         ]);
 
         await loadPublicClinicInfo();
@@ -404,6 +472,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (storedActiveRole === "dentist" && storedDentistToken) {
           setActiveRole("dentist");
           setDentistToken(storedDentistToken);
+          setDentistNotificationPermission(parsePermissionStatus(storedDentistNotificationPermission));
           if (storedDentist) {
             const dentist = toDentistProfile(JSON.parse(storedDentist));
             setCurrentDentist(dentist);
@@ -461,6 +530,48 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [customerToken, fetchCustomerDashboardData]);
 
+  const requestDentistNotificationPermission = useCallback(async () => {
+    if (!isNativeNotificationSupported()) {
+      return "unknown" as const;
+    }
+
+    try {
+      const status = await requestNativeNotificationPermission();
+      setDentistNotificationPermission(status);
+      await AsyncStorage.setItem(STORAGE_DENTIST_NOTIFICATION_PERMISSION_KEY, status);
+      return status;
+    } catch (error) {
+      console.warn("Unable to request dentist notification permission", error);
+      setDentistNotificationPermission("denied");
+      await AsyncStorage.setItem(STORAGE_DENTIST_NOTIFICATION_PERMISSION_KEY, "denied");
+      return "denied" as const;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeRole !== "dentist" || !isNativeNotificationSupported()) {
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const status = await getNativeNotificationPermission();
+        if (!cancelled) {
+          setDentistNotificationPermission(status);
+        }
+        await AsyncStorage.setItem(STORAGE_DENTIST_NOTIFICATION_PERMISSION_KEY, status);
+      } catch (error) {
+        console.warn("Unable to read dentist notification permission", error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeRole]);
+
   useEffect(() => {
     if (activeRole !== "customer") {
       hasInitializedAlertTrackingRef.current = false;
@@ -482,23 +593,157 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [activeRole, customerAlerts]);
 
+  useEffect(() => {
+    if (activeRole !== "dentist" || !dentistToken) {
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      void refreshDentistDashboard();
+    }, DENTIST_REFRESH_INTERVAL_MS);
+
+    const appStateSub = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        void refreshDentistDashboard();
+      }
+    });
+
+    return () => {
+      clearInterval(intervalId);
+      appStateSub.remove();
+    };
+  }, [activeRole, dentistToken, refreshDentistDashboard]);
+
+  useEffect(() => {
+    if (!isNativeNotificationSupported()) {
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const osPermission = await getNativeNotificationPermission();
+        const hasPermission =
+          activeRole === "dentist"
+            ? dentistNotificationPermission === "granted" && osPermission === "granted"
+            : activeRole === "customer"
+            ? currentCustomer?.notificationPermission === "granted" && osPermission === "granted"
+            : false;
+
+        if (!hasPermission) {
+          const storedIdsRaw = await AsyncStorage.getItem(STORAGE_LOCAL_REMINDER_IDS_KEY);
+          const storedIds = storedIdsRaw ? (JSON.parse(storedIdsRaw) as string[]) : [];
+          await cancelNativeReminders(storedIds);
+          await AsyncStorage.removeItem(STORAGE_LOCAL_REMINDER_IDS_KEY);
+          lastReminderSyncSignatureRef.current = "";
+          return;
+        }
+
+        const now = Date.now();
+        const reminderInputs =
+          activeRole === "dentist"
+            ? appointments
+                .filter((item) => item.status === "pending" || item.status === "confirmed" || item.status === "accepted")
+                .map((item) => {
+                  const startAt = appointmentStartDateTime(item.date, item.time);
+                  const triggerAt = reminderTriggerDateTime(startAt);
+                  if (!triggerAt || startAt.getTime() <= now) return null;
+                  const patientLabel = item.bookedForName?.trim() || "your patient";
+                  return {
+                    key: `dentist:${item.id}:${item.date}:${item.time}`,
+                    appointmentId: item.id,
+                    triggerAt,
+                    startsAt: startAt,
+                    title: "Appointment in 30 minutes",
+                    body: `${patientLabel} is scheduled at ${item.time}.`,
+                  };
+                })
+                .filter((item): item is NonNullable<typeof item> => Boolean(item))
+            : activeRole === "customer"
+            ? customerAppointments
+                .filter((item) => item.status === "pending" || item.status === "accepted")
+                .map((item) => {
+                  const startAt = appointmentStartDateTime(item.date, item.time);
+                  const triggerAt = reminderTriggerDateTime(startAt);
+                  if (!triggerAt || startAt.getTime() <= now) return null;
+                  const clinicName = clinicProfile.clinicName?.trim() || "your clinic";
+                  return {
+                    key: `customer:${item.id}:${item.date}:${item.time}`,
+                    appointmentId: item.id,
+                    triggerAt,
+                    startsAt: startAt,
+                    title: "Appointment reminder",
+                    body: `Your appointment at ${clinicName} is in 30 minutes.`,
+                  };
+                })
+                .filter((item): item is NonNullable<typeof item> => Boolean(item))
+            : [];
+
+        const sortedReminders = reminderInputs
+          .sort((a, b) => a.triggerAt.getTime() - b.triggerAt.getTime())
+          .slice(0, REMINDER_MAX_ITEMS);
+
+        const signature = JSON.stringify(
+          sortedReminders.map((item) => [item.key, item.triggerAt.toISOString()])
+        );
+
+        if (signature === lastReminderSyncSignatureRef.current) {
+          return;
+        }
+
+        const storedIdsRaw = await AsyncStorage.getItem(STORAGE_LOCAL_REMINDER_IDS_KEY);
+        const storedIds = storedIdsRaw ? (JSON.parse(storedIdsRaw) as string[]) : [];
+        await cancelNativeReminders(storedIds);
+
+        const newlyScheduledIds: string[] = [];
+        for (const reminder of sortedReminders) {
+          const notificationId = await scheduleNativeReminder({
+            appointmentId: reminder.appointmentId,
+            title: reminder.title,
+            body: reminder.body,
+            triggerAt: reminder.triggerAt,
+          });
+          if (notificationId) {
+            newlyScheduledIds.push(notificationId);
+          }
+        }
+
+        if (cancelled) {
+          await cancelNativeReminders(newlyScheduledIds);
+          return;
+        }
+
+        await AsyncStorage.setItem(STORAGE_LOCAL_REMINDER_IDS_KEY, JSON.stringify(newlyScheduledIds));
+        lastReminderSyncSignatureRef.current = signature;
+      } catch (error) {
+        console.warn("Failed to sync reminder notifications", error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeRole,
+    appointments,
+    clinicProfile.clinicName,
+    currentCustomer?.notificationPermission,
+    customerAppointments,
+    dentistNotificationPermission,
+  ]);
+
   const refreshAll = useCallback(async () => {
     await loadPublicClinicInfo();
-    if (dentistToken) {
-      try {
-        await fetchDentistProtectedData(dentistToken);
-      } catch (error) {
-        console.warn("Failed to refresh protected dentist data", error);
-      }
-    }
+    if (dentistToken) await refreshDentistDashboard();
     if (customerToken) {
       await refreshCustomerDashboard();
     }
   }, [
     customerToken,
     dentistToken,
-    fetchDentistProtectedData,
     loadPublicClinicInfo,
+    refreshDentistDashboard,
     refreshCustomerDashboard,
   ]);
 
@@ -565,6 +810,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(async () => {
+    const reminderIdsRaw = await AsyncStorage.getItem(STORAGE_LOCAL_REMINDER_IDS_KEY);
+    const reminderIds = reminderIdsRaw ? (JSON.parse(reminderIdsRaw) as string[]) : [];
+    await cancelNativeReminders(reminderIds);
+    await AsyncStorage.removeItem(STORAGE_LOCAL_REMINDER_IDS_KEY);
+    lastReminderSyncSignatureRef.current = "";
     clearDentistState();
     setActiveRole(null);
     await AsyncStorage.multiRemove([
@@ -627,6 +877,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const customerLogout = useCallback(async () => {
+    const reminderIdsRaw = await AsyncStorage.getItem(STORAGE_LOCAL_REMINDER_IDS_KEY);
+    const reminderIds = reminderIdsRaw ? (JSON.parse(reminderIdsRaw) as string[]) : [];
+    await cancelNativeReminders(reminderIds);
+    await AsyncStorage.removeItem(STORAGE_LOCAL_REMINDER_IDS_KEY);
+    lastReminderSyncSignatureRef.current = "";
     clearCustomerState();
     setActiveRole(null);
     await AsyncStorage.multiRemove([
@@ -879,6 +1134,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       appointments,
       customerAppointments,
       customerAlerts,
+      dentistNotificationPermission,
       analytics,
       login,
       signup,
@@ -898,7 +1154,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateAppointmentStatus,
       deleteAppointment,
       getAvailableSlots,
+      requestDentistNotificationPermission,
       refreshAll,
+      refreshDentistDashboard,
       refreshCustomerDashboard,
     }),
     [
@@ -920,13 +1178,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       customerRegister,
       deleteAppointment,
       deletePatient,
+      dentistNotificationPermission,
       getAvailableSlots,
       isLoading,
       login,
       logout,
       patients,
       refreshAll,
+      refreshDentistDashboard,
       refreshCustomerDashboard,
+      requestDentistNotificationPermission,
       signup,
       updateAppointmentStatus,
       updateCustomerNotificationPermission,

@@ -13,6 +13,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
+import {
+  isNativeNotificationSupported,
+  requestNativeNotificationPermission,
+} from "@/utils/nativeNotifications";
 
 function statusColor(status: string) {
   if (status === "accepted") return Colors.status.confirmed;
@@ -55,17 +59,24 @@ export default function CustomerDashboard() {
             text: "Allow",
             onPress: async () => {
               try {
+                if (isNativeNotificationSupported()) {
+                  const permission = await requestNativeNotificationPermission();
+                  await updateCustomerNotificationPermission(
+                    permission === "granted" ? "granted" : "denied"
+                  );
+                  return;
+                }
+
                 const NotificationApi = (globalThis as any)?.Notification;
                 if (NotificationApi?.requestPermission) {
                   const permission = await NotificationApi.requestPermission();
-                  if (permission === "granted") {
-                    await updateCustomerNotificationPermission("granted");
-                  } else {
-                    await updateCustomerNotificationPermission("denied");
-                  }
+                  await updateCustomerNotificationPermission(
+                    permission === "granted" ? "granted" : "denied"
+                  );
                   return;
                 }
-                await updateCustomerNotificationPermission("granted");
+
+                await updateCustomerNotificationPermission("denied");
               } catch {
                 updateCustomerNotificationPermission("denied").catch(() => {});
               }

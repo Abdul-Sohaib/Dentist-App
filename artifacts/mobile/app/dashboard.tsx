@@ -1,8 +1,9 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -35,8 +36,16 @@ function greeting(): string {
 }
 
 export default function DashboardScreen() {
-  const { currentDentist, appointments, patients } = useApp();
+  const {
+    currentDentist,
+    appointments,
+    patients,
+    dentistNotificationPermission,
+    requestDentistNotificationPermission,
+    refreshDentistDashboard,
+  } = useApp();
   const insets = useSafeAreaInsets();
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const today = todayStr();
 
   const todayApts = useMemo(
@@ -56,6 +65,41 @@ export default function DashboardScreen() {
     ).length;
     return { total, pending, confirmed, completed, upcoming, patients: patients.length };
   }, [appointments, patients, today]);
+
+  useEffect(() => {
+    if (!currentDentist || Platform.OS === "web") {
+      return;
+    }
+
+    if (dentistNotificationPermission !== "unknown") {
+      return;
+    }
+
+    Alert.alert(
+      "Enable Appointment Notifications",
+      "Allow reminders so you get notified 30 minutes before scheduled appointments.",
+      [
+        { text: "Not now", style: "cancel" },
+        {
+          text: "Allow",
+          onPress: () => {
+            void requestDentistNotificationPermission();
+          },
+        },
+      ]
+    );
+  }, [currentDentist, dentistNotificationPermission, requestDentistNotificationPermission]);
+
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      await refreshDentistDashboard();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   if (!currentDentist) return null;
 
@@ -78,6 +122,13 @@ export default function DashboardScreen() {
               {currentDentist.clinicName}
             </Text>
           </View>
+          <Pressable
+            onPress={handleRefresh}
+            style={({ pressed }) => [styles.refreshBtn, { opacity: pressed ? 0.75 : 1 }]}
+          >
+            <Feather name="refresh-cw" size={16} color={Colors.primary} />
+            <Text style={styles.refreshBtnText}>{isRefreshing ? "Refreshing..." : "Refresh"}</Text>
+          </Pressable>
           <View style={styles.avatarCircle}>
             <Text style={styles.avatarText}>
               {currentDentist.name.replace("Dr. ", "").split(" ").map((w) => w[0]).slice(0, 2).join("")}
@@ -298,6 +349,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
     gap: 12,
+  },
+  refreshBtn: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  refreshBtnText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
+    color: Colors.primary,
   },
   greeting: {
     fontFamily: "Inter_400Regular",

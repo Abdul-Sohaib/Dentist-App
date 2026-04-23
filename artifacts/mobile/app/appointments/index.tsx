@@ -32,9 +32,10 @@ function fmtDate(s: string) {
 }
 
 export default function AppointmentsScreen() {
-  const { appointments, patients, updateAppointmentStatus, deleteAppointment } = useApp();
+  const { appointments, patients, updateAppointmentStatus, deleteAppointment, refreshDentistDashboard } = useApp();
   const insets = useSafeAreaInsets();
   const [filter, setFilter] = useState<Filter>("all");
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const today = new Date().toISOString().split("T")[0];
 
   const filtered = useMemo(() => {
@@ -60,6 +61,17 @@ export default function AppointmentsScreen() {
     await updateAppointmentStatus(id, status);
   };
 
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      await refreshDentistDashboard();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   return (
     <View style={styles.screen}>
       <View style={[styles.header, { paddingTop: Platform.OS === "web" ? 24 : insets.top + 8 }]}>
@@ -68,16 +80,25 @@ export default function AppointmentsScreen() {
             <Text style={styles.title}>Appointments</Text>
             <Text style={styles.subtitle}>{appointments.length} total</Text>
           </View>
-          <Pressable
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              router.push("/appointments/book");
-            }}
-            style={({ pressed }) => [styles.addBtn, { opacity: pressed ? 0.85 : 1 }]}
-          >
-            <Feather name="plus" size={20} color={Colors.white} />
-            <Text style={styles.addBtnText}>Book</Text>
-          </Pressable>
+          <View style={styles.headerActions}>
+            <Pressable
+              onPress={handleRefresh}
+              style={({ pressed }) => [styles.refreshBtn, { opacity: pressed ? 0.8 : 1 }]}
+            >
+              <Feather name="refresh-cw" size={15} color={Colors.primary} />
+              <Text style={styles.refreshBtnText}>{isRefreshing ? "Refreshing..." : "Refresh"}</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push("/appointments/book");
+              }}
+              style={({ pressed }) => [styles.addBtn, { opacity: pressed ? 0.85 : 1 }]}
+            >
+              <Feather name="plus" size={20} color={Colors.white} />
+              <Text style={styles.addBtnText}>Book</Text>
+            </Pressable>
+          </View>
         </View>
 
         <ScrollView
@@ -231,6 +252,27 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  refreshBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  refreshBtnText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
+    color: Colors.primary,
   },
   title: { fontFamily: "Inter_700Bold", fontSize: 26, color: Colors.text.primary },
   subtitle: { fontFamily: "Inter_400Regular", fontSize: 13, color: Colors.text.muted },
