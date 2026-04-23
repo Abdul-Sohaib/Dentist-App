@@ -1,12 +1,50 @@
+import Constants from "expo-constants";
+import { Platform } from "react-native";
+
 const PLACEHOLDER_BACKEND = "https://your-backend-url";
 const LOCALHOST_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1"]);
 
+const extractHostFromExpoManifest = () => {
+  const anyConstants = Constants as unknown as {
+    manifest?: { debuggerHost?: string; hostUri?: string };
+    manifest2?: { extra?: { expoClient?: { hostUri?: string } } };
+    expoConfig?: { hostUri?: string };
+  };
+
+  const rawCandidates = [
+    anyConstants.expoConfig?.hostUri,
+    anyConstants.manifest2?.extra?.expoClient?.hostUri,
+    anyConstants.manifest?.debuggerHost,
+    anyConstants.manifest?.hostUri,
+  ].filter((candidate): candidate is string => typeof candidate === "string" && candidate.length > 0);
+
+  for (const candidate of rawCandidates) {
+    const normalized = candidate.replace(/^https?:\/\//i, "");
+    const host = normalized.split("/")[0]?.split(":")[0];
+    if (host) {
+      return host;
+    }
+  }
+
+  return null;
+};
+
 const inferDefaultUrl = () => {
-  if (typeof window !== "undefined" && window.location?.hostname) {
+  if (Platform.OS === "web" && typeof window !== "undefined" && window.location?.hostname) {
     return `http://${window.location.hostname}:5000`;
   }
 
-  return "http://localhost:5000";
+  const expoHost = extractHostFromExpoManifest();
+  if (expoHost) {
+    return `http://${expoHost}:5000`;
+  }
+
+  if (Platform.OS === "android") {
+    // Android emulators cannot reach host machine via localhost.
+    return "http://10.0.2.2:5000";
+  }
+
+  return "http://127.0.0.1:5000";
 };
 
 const normalizeConfiguredUrl = (value?: string) => {
@@ -16,7 +54,7 @@ const normalizeConfiguredUrl = (value?: string) => {
     return null;
   }
 
-  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 
   try {
     const url = new URL(withProtocol);
@@ -31,9 +69,33 @@ const normalizeConfiguredUrl = (value?: string) => {
   }
 };
 
-const configuredUrl = normalizeConfiguredUrl(process.env.EXPO_PUBLIC_API_URL);
+const normalizeApiBaseUrl = (value: string) => {
+  const trimmed = value.replace(/\/+$/, "");
 
-export const API_URL =
-  configuredUrl ?? inferDefaultUrl();
+  try {
+    const url = new URL(trimmed);
+    const pathname = (url.pathname || "").replace(/\/+$/, "");
+    const hasApiSuffix = pathname === "/api" || pathname.endsWith("/api");
 
-export const API_BASE_URL = API_URL.endsWith("/") ? `${API_URL}api` : `${API_URL}/api`;
+    if (!hasApiSuffix) {
+      const basePath = pathname === "" ? "" : pathname;
+      url.pathname = `${basePath}/api`;
+    } else {
+      url.pathname = pathname;
+    }
+
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    if (trimmed.endsWith("/api")) {
+      return trimmed;
+    }
+    return `${trimmed}/api`;
+  }
+};
+
+const configuredUrl =
+  normalizeConfiguredUrl(process.env.EXPO_PUBLIC_API_URL) ??
+  normalizeConfiguredUrl(process.env.EXPO_PUBLIC_DOMAIN);
+
+export const API_URL = configuredUrl ?? inferDefaultUrl();
+export const API_BASE_URL = normalizeApiBaseUrl(API_URL);
