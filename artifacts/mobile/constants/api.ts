@@ -72,24 +72,34 @@ const normalizeConfiguredUrl = (value?: string) => {
 const normalizeApiBaseUrl = (value: string) => {
   const trimmed = value.replace(/\/+$/, "");
 
+  const normalizePathnameToApiRoot = (pathname: string) => {
+    const segments = pathname.split("/").filter(Boolean);
+    const apiIndex = segments.findIndex((segment) => segment.toLowerCase() === "api");
+
+    if (apiIndex >= 0) {
+      return `/${segments.slice(0, apiIndex + 1).join("/")}`;
+    }
+
+    if (segments.length === 0) {
+      return "/api";
+    }
+
+    return `/${segments.join("/")}/api`;
+  };
+
   try {
     const url = new URL(trimmed);
     const pathname = (url.pathname || "").replace(/\/+$/, "");
-    const hasApiSuffix = pathname === "/api" || pathname.endsWith("/api");
-
-    if (!hasApiSuffix) {
-      const basePath = pathname === "" ? "" : pathname;
-      url.pathname = `${basePath}/api`;
-    } else {
-      url.pathname = pathname;
-    }
+    url.pathname = normalizePathnameToApiRoot(pathname);
 
     return url.toString().replace(/\/$/, "");
   } catch {
-    if (trimmed.endsWith("/api")) {
-      return trimmed;
+    const normalized = trimmed.replace(/\/+$/, "");
+    const apiMarkerIndex = normalized.toLowerCase().indexOf("/api");
+    if (apiMarkerIndex >= 0) {
+      return normalized.slice(0, apiMarkerIndex + 4);
     }
-    return `${trimmed}/api`;
+    return `${normalized}/api`;
   }
 };
 

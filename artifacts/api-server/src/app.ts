@@ -33,6 +33,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
+// Compatibility mount for deployments/proxies that strip or rewrite the /api prefix.
+app.use(router);
 
 app.use((req: Request, res: Response) => {
   res.status(404).json({
