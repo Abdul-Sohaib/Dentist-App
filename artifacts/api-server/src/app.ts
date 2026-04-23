@@ -2,6 +2,7 @@ import express, { type Express, Request, Response, NextFunction } from "express"
 import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
+import { loginCustomer, registerCustomer } from "./controllers/customer-auth.controller";
 
 const app: Express = express();
 
@@ -31,6 +32,10 @@ app.use(
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Explicit mounts keep customer auth endpoints stable across deploy/router drift.
+app.post("/api/customer/auth/register", registerCustomer);
+app.post("/api/customer/auth/login", loginCustomer);
 
 app.use("/api", router);
 // Compatibility mount for deployments/proxies that strip or rewrite the /api prefix.
