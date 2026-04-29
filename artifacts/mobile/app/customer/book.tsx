@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -68,6 +69,7 @@ export default function CustomerBook() {
   const [phone, setPhone] = useState("");
   const [problem, setProblem] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [issueMedia, setIssueMedia] = useState<{ kind: "photo" | "video"; dataUri: string; label: string } | null>(null);
 
   const cells = useMemo(() => buildCalendarDays(viewYear, viewMonth), [viewYear, viewMonth]);
   const [availableSlots, setAvailableSlots] = useState<string[]>([]);
@@ -164,6 +166,7 @@ export default function CustomerBook() {
         date: selectedDate!,
         time: selectedSlot!,
         bookFor,
+        issueMedia: issueMedia ? { kind: issueMedia.kind, dataUri: issueMedia.dataUri } : undefined,
       });
       router.replace({
         pathname: "/customer/success",
@@ -185,6 +188,28 @@ export default function CustomerBook() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function pickIssueMedia(kind: "photo" | "video") {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: kind === "photo" ? ["images"] : ["videos"],
+      allowsMultipleSelection: false,
+      base64: true,
+      quality: 0.7,
+      videoMaxDuration: 60,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    if (!asset.base64) {
+      Alert.alert("Selection failed", "Unable to read the selected file.");
+      return;
+    }
+    const mime = asset.mimeType ?? (kind === "photo" ? "image/jpeg" : "video/mp4");
+    setIssueMedia({
+      kind,
+      dataUri: `data:${mime};base64,${asset.base64}`,
+      label: kind === "photo" ? "Photo attached" : "Video attached",
+    });
   }
 
   return (
@@ -416,6 +441,25 @@ export default function CustomerBook() {
                     textAlignVertical="top"
                   />
                 </View>
+              </View>
+              <View style={styles.formField}>
+                <Text style={styles.label}>Issue Media (Optional)</Text>
+                <View style={styles.bookingTypeRow}>
+                  <Pressable style={styles.bookingTypeBtn} onPress={() => pickIssueMedia("photo")}>
+                    <Text style={styles.bookingTypeText}>Add Photo</Text>
+                  </Pressable>
+                  <Pressable style={styles.bookingTypeBtn} onPress={() => pickIssueMedia("video")}>
+                    <Text style={styles.bookingTypeText}>Add Video</Text>
+                  </Pressable>
+                </View>
+                {issueMedia ? (
+                  <View style={styles.selfBox}>
+                    <Text style={styles.selfText}>{issueMedia.label}</Text>
+                    <Pressable onPress={() => setIssueMedia(null)}>
+                      <Text style={styles.linkRemove}>Remove</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
               </View>
             </View>
           )}
@@ -652,6 +696,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background.secondary,
   },
   selfText: { fontFamily: "Inter_500Medium", fontSize: 12, color: Colors.text.secondary },
+  linkRemove: { fontFamily: "Inter_600SemiBold", fontSize: 12, color: Colors.status.cancelled },
   label: { fontFamily: "Inter_600SemiBold", fontSize: 13, color: Colors.text.secondary },
   inputWrap: {
     flexDirection: "row",

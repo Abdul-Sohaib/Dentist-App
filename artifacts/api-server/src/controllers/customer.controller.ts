@@ -7,6 +7,7 @@ import Patient from "../models/Patient";
 import type { CustomerAuthenticatedRequest } from "../types/auth";
 import { generateSlots } from "../utils/slots";
 import { dbUnavailableMessage, isMongoConnectivityError } from "../utils/db-errors";
+import { uploadBase64ToCloudinary } from "../utils/cloudinary";
 
 const ACTIVE_BOOKING_STATUSES = ["pending", "accepted", "confirmed"];
 
@@ -30,6 +31,7 @@ const mapAppointment = (appointment: any) => ({
   reason: appointment.reason ?? "",
   problem: appointment.reason ?? "",
   status: toCustomerFacingStatus(appointment.status),
+  issueMedia: appointment.issueMedia ?? null,
   createdAt: appointment.createdAt,
   updatedAt: appointment.updatedAt,
 });
@@ -99,6 +101,8 @@ export const getCustomerDashboard = async (req: CustomerAuthenticatedRequest, re
             workingDays: dentist.workingDays,
             slotDuration: dentist.slotDuration,
             breakTimes: dentist.breakTimes,
+            showcasePhotos: dentist.showcasePhotos ?? [],
+            showcaseVideos: dentist.showcaseVideos ?? [],
           }
         : null,
       appointments: appointments.map((appointment) =>
@@ -259,7 +263,7 @@ export const createCustomerAppointment = async (req: CustomerAuthenticatedReques
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const { patientName, phone, date, timeSlot, reason, problem, bookFor } = req.body;
+    const { patientName, phone, date, timeSlot, reason, problem, bookFor, issueMedia } = req.body;
 
     if (!date || !timeSlot || !problem) {
       return res.status(400).json({ message: "date, timeSlot and problem are required" });
@@ -307,6 +311,28 @@ export const createCustomerAppointment = async (req: CustomerAuthenticatedReques
       });
     }
 
+    let issueMediaPayload: Record<string, unknown> | null = null;
+    if (issueMedia?.dataUri && issueMedia?.kind) {
+      const kind = String(issueMedia.kind);
+      if (!["photo", "video"].includes(kind)) {
+        return res.status(400).json({ message: "Invalid issue media kind" });
+      }
+      const upload = await uploadBase64ToCloudinary(
+        String(issueMedia.dataUri),
+        kind === "photo" ? "image" : "video",
+        "dentbook/issues"
+      );
+      if (upload.resourceType === "video" && (upload.durationSeconds ?? 0) > 60) {
+        return res.status(400).json({ message: "Issue video must be 60 seconds or less" });
+      }
+      issueMediaPayload = {
+        url: upload.url,
+        publicId: upload.publicId,
+        resourceType: upload.resourceType,
+        durationSeconds: upload.durationSeconds,
+      };
+    }
+
     const ticketId = await generateTicketId();
 
     const appointment = await Appointment.create({
@@ -319,6 +345,7 @@ export const createCustomerAppointment = async (req: CustomerAuthenticatedReques
       date,
       timeSlot,
       reason: reason ?? problem ?? "",
+      issueMedia: issueMediaPayload,
       status: "pending",
     });
 

@@ -21,6 +21,7 @@ const mapAppointment = (apt: any) => ({
   time: apt.timeSlot,
   reason: apt.reason ?? "",
   problem: apt.reason ?? "",
+  issueMedia: apt.issueMedia ?? null,
   status: apt.status,
   createdAt: apt.createdAt,
   updatedAt: apt.updatedAt,

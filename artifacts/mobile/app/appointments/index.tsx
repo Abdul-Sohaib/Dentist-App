@@ -3,6 +3,8 @@ import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useMemo, useState } from "react";
 import {
+  Image,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -172,6 +174,24 @@ export default function AppointmentsScreen() {
                         <StatusBadge status={apt.status} />
                       </View>
                     </View>
+                    {apt.issueMedia?.url ? (
+                      <View style={styles.issueMediaWrap}>
+                        <Text style={styles.issueMediaTitle}>Patient Issue Media</Text>
+                        {apt.issueMedia.resourceType === "image" ? (
+                          <Image source={{ uri: apt.issueMedia.url }} style={styles.issueImage} />
+                        ) : (
+                          <Pressable
+                            onPress={() => Linking.openURL(apt.issueMedia?.url ?? "")}
+                            style={({ pressed }) => [styles.issueVideoBtn, { opacity: pressed ? 0.82 : 1 }]}
+                          >
+                            <Feather name="play-circle" size={16} color={Colors.primary} />
+                            <Text style={styles.issueVideoText}>
+                              Play patient video ({Math.ceil(apt.issueMedia.durationSeconds ?? 0)}s)
+                            </Text>
+                          </Pressable>
+                        )}
+                      </View>
+                    ) : null}
 
                     {(apt.status === "pending" || apt.status === "confirmed") && (
                       <View style={styles.aptActions}>
@@ -348,6 +368,39 @@ const styles = StyleSheet.create({
   patientAvatarText: { fontFamily: "Inter_700Bold", fontSize: 15, color: Colors.primary },
   patientName: { fontFamily: "Inter_600SemiBold", fontSize: 15, color: Colors.text.primary },
   aptMeta: { fontFamily: "Inter_400Regular", fontSize: 12, color: Colors.text.muted, marginTop: 1 },
+  issueMediaWrap: {
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+    gap: 8,
+  },
+  issueMediaTitle: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
+    color: Colors.text.secondary,
+  },
+  issueImage: {
+    width: "100%",
+    height: 150,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  issueVideoBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 10,
+    backgroundColor: Colors.primaryLight,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  issueVideoText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
+    color: Colors.primary,
+  },
   aptActions: {
     flexDirection: "row",
     borderTopWidth: 1,

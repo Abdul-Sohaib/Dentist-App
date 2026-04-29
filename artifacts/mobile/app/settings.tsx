@@ -1,9 +1,11 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -22,7 +24,7 @@ const DAYS_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const SLOT_OPTIONS = [15, 20, 30, 45, 60];
 
 export default function SettingsScreen() {
-  const { currentDentist, updateProfile, logout } = useApp();
+  const { currentDentist, updateProfile, uploadShowcaseMedia, removeShowcaseMedia, logout } = useApp();
   const insets = useSafeAreaInsets();
 
   const [name, setName] = useState(currentDentist?.name ?? "");
@@ -36,6 +38,7 @@ export default function SettingsScreen() {
   const [workingDays, setWorkingDays] = useState<number[]>(currentDentist?.workingDays ?? [1,2,3,4,5]);
   const [slotDuration, setSlotDuration] = useState(currentDentist?.slotDuration ?? 30);
   const [saved, setSaved] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const toggleDay = (day: number) => {
     setWorkingDays((prev) =>
@@ -80,6 +83,45 @@ export default function SettingsScreen() {
         },
       },
     ]);
+  };
+
+  const pickAndUpload = async (kind: "photo" | "video") => {
+    if (!currentDentist) return;
+    const photoCount = currentDentist.showcasePhotos?.length ?? 0;
+    const videoCount = currentDentist.showcaseVideos?.length ?? 0;
+    if (kind === "photo" && photoCount >= 3) {
+      Alert.alert("Limit reached", "You can upload maximum 3 photos.");
+      return;
+    }
+    if (kind === "video" && videoCount >= 2) {
+      Alert.alert("Limit reached", "You can upload maximum 2 videos.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: kind === "photo" ? ["images"] : ["videos"],
+      quality: 0.7,
+      allowsMultipleSelection: false,
+      base64: true,
+      videoMaxDuration: 60,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    if (!asset.base64) {
+      Alert.alert("Upload failed", "Unable to read selected file.");
+      return;
+    }
+    const mime = asset.mimeType ?? (kind === "photo" ? "image/jpeg" : "video/mp4");
+    const dataUri = `data:${mime};base64,${asset.base64}`;
+    setUploading(true);
+    try {
+      await uploadShowcaseMedia(kind, dataUri);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      Alert.alert("Upload failed", String(error instanceof Error ? error.message : error));
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
@@ -240,6 +282,52 @@ export default function SettingsScreen() {
             variant={saved ? "secondary" : "primary"}
             style={styles.saveBtn}
           />
+
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Showcase Media</Text>
+            <Text style={styles.profileClinic}>Upload up to 3 photos and 2 videos (max 1 min).</Text>
+            <View style={styles.slotsRow}>
+              <Button
+                label="Add Photo"
+                onPress={() => pickAndUpload("photo")}
+                icon="image"
+                variant="secondary"
+                style={{ flex: 1 }}
+              />
+              <Button
+                label="Add Video"
+                onPress={() => pickAndUpload("video")}
+                icon="video"
+                variant="secondary"
+                style={{ flex: 1 }}
+              />
+            </View>
+            {uploading ? <Text style={styles.profileClinic}>Uploading...</Text> : null}
+            {(currentDentist?.showcasePhotos?.length ?? 0) > 0 ? (
+              <View style={styles.form}>
+                {currentDentist?.showcasePhotos?.map((item) => (
+                  <View key={item.publicId} style={styles.mediaRow}>
+                    <Image source={{ uri: item.url }} style={styles.mediaThumb} />
+                    <Pressable onPress={() => removeShowcaseMedia(item.publicId)}>
+                      <Feather name="trash-2" size={16} color={Colors.status.cancelled} />
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+            {(currentDentist?.showcaseVideos?.length ?? 0) > 0 ? (
+              <View style={styles.form}>
+                {currentDentist?.showcaseVideos?.map((item) => (
+                  <View key={item.publicId} style={styles.mediaRow}>
+                    <Text style={styles.rowLabel}>Video ({Math.ceil(item.durationSeconds ?? 0)}s)</Text>
+                    <Pressable onPress={() => removeShowcaseMedia(item.publicId)}>
+                      <Feather name="trash-2" size={16} color={Colors.status.cancelled} />
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+          </View>
 
           <View style={styles.dangerZone}>
             <Text style={styles.dangerTitle}>Account</Text>
@@ -431,6 +519,25 @@ const styles = StyleSheet.create({
     color: Colors.text.muted,
     textAlign: "center",
     marginTop: 4,
+  },
+  mediaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 10,
+    padding: 8,
+  },
+  mediaThumb: {
+    width: 80,
+    height: 56,
+    borderRadius: 8,
+  },
+  rowLabel: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 13,
+    color: Colors.text.secondary,
   },
 });
 

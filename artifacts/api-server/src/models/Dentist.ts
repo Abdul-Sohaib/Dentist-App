@@ -16,6 +16,16 @@ const workingHoursSchema = new Schema(
   { _id: false }
 );
 
+const mediaItemSchema = new Schema(
+  {
+    url: { type: String, required: true, trim: true },
+    publicId: { type: String, required: true, trim: true },
+    resourceType: { type: String, enum: ["image", "video"], required: true },
+    durationSeconds: { type: Number },
+  },
+  { _id: false }
+);
+
 const dentistSchema = new Schema(
   {
     name: { type: String, required: true, trim: true },
@@ -29,6 +39,8 @@ const dentistSchema = new Schema(
     breakTimes: { type: [timeRangeSchema], default: [] },
     bio: { type: String, default: "" },
     location: { type: String, default: "" },
+    showcasePhotos: { type: [mediaItemSchema], default: [] },
+    showcaseVideos: { type: [mediaItemSchema], default: [] },
   },
   { timestamps: true }
 );

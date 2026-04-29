@@ -3,6 +3,8 @@ import { router } from "expo-router";
 import React, { useEffect } from "react";
 import {
   Alert,
+  Image,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -103,6 +105,10 @@ export default function CustomerDashboard() {
   const consultationTime = clinicProfile.slotDuration
     ? `${clinicProfile.slotDuration} minutes per patient`
     : "-";
+  const showcaseItems = [
+    ...(clinicProfile.showcasePhotos ?? []),
+    ...(clinicProfile.showcaseVideos ?? []),
+  ];
 
   return (
     <View style={styles.root}>
@@ -189,6 +195,25 @@ export default function CustomerDashboard() {
               : "Doctor profile description is not added yet."}
           </Text>
         </View>
+        {showcaseItems.length > 0 ? (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Doctor Showcase</Text>
+            <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
+              {showcaseItems.map((item) => (
+                <View key={item.publicId} style={styles.carouselCard}>
+                  {item.resourceType === "image" ? (
+                    <Image source={{ uri: item.url }} style={styles.carouselImage} />
+                  ) : (
+                    <Pressable style={styles.videoCard} onPress={() => Linking.openURL(item.url)}>
+                      <Feather name="play-circle" size={32} color={Colors.primary} />
+                      <Text style={styles.link}>Play video ({Math.ceil(item.durationSeconds ?? 0)}s)</Text>
+                    </Pressable>
+                  )}
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
 
         <View style={styles.card}>
           <View style={styles.sectionHeader}>
@@ -347,4 +372,20 @@ const styles = StyleSheet.create({
   alertTitle: { fontFamily: "Inter_600SemiBold", fontSize: 12, color: Colors.text.primary },
   alertMsg: { fontFamily: "Inter_400Regular", fontSize: 11, color: Colors.text.secondary, lineHeight: 16 },
   empty: { fontFamily: "Inter_400Regular", fontSize: 12, color: Colors.text.muted },
+  carouselCard: {
+    width: 280,
+    marginRight: 10,
+    borderRadius: 12,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  carouselImage: { width: "100%", height: 180 },
+  videoCard: {
+    height: 180,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: Colors.background.secondary,
+  },
 });

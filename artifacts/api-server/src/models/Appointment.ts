@@ -20,6 +20,15 @@ const appointmentSchema = new Schema(
     date: { type: String, required: true, index: true },
     timeSlot: { type: String, required: true },
     reason: { type: String, default: "" },
+    issueMedia: {
+      type: {
+        url: { type: String, trim: true, default: "" },
+        publicId: { type: String, trim: true, default: "" },
+        resourceType: { type: String, enum: ["image", "video"] },
+        durationSeconds: { type: Number },
+      },
+      default: null,
+    },
     status: {
       type: String,
       enum: APPOINTMENT_STATUSES,

@@ -36,6 +36,14 @@ export interface DentistProfile {
   specialty?: string;
   experience?: number;
   rating?: number;
+  showcasePhotos?: MediaItem[];
+  showcaseVideos?: MediaItem[];
+}
+export interface MediaItem {
+  url: string;
+  publicId: string;
+  resourceType: "image" | "video";
+  durationSeconds?: number;
 }
 
 export interface CustomerAccount {
@@ -73,6 +81,7 @@ export interface Appointment {
   problem: string;
   status: AppointmentStatus;
   createdAt: string;
+  issueMedia?: MediaItem | null;
 }
 
 export interface CustomerAlert {
@@ -115,6 +124,8 @@ interface AppContextType {
   clearCustomerAlert: (alertId: string) => Promise<void>;
   clearAllCustomerAlerts: () => Promise<void>;
   updateProfile: (data: Partial<DentistProfile>) => Promise<void>;
+  uploadShowcaseMedia: (kind: "photo" | "video", dataUri: string) => Promise<void>;
+  removeShowcaseMedia: (publicId: string) => Promise<void>;
   addPatient: (data: Omit<Patient, "id" | "createdAt">) => Promise<Patient>;
   updatePatient: (id: string, data: Partial<Patient>) => Promise<void>;
   deletePatient: (id: string) => Promise<void>;
@@ -127,6 +138,7 @@ interface AppContextType {
     date: string;
     time: string;
     bookFor?: "self" | "other";
+    issueMedia?: { kind: "photo" | "video"; dataUri: string };
   }) => Promise<Appointment>;
   updateAppointmentStatus: (id: string, status: Appointment["status"]) => Promise<void>;
   deleteAppointment: (id: string) => Promise<void>;
@@ -212,6 +224,8 @@ const EMPTY_DENTIST: DentistProfile = {
   slotDuration: 30,
   breakTimes: [{ start: "13:00", end: "14:00" }],
   bio: "",
+  showcasePhotos: [],
+  showcaseVideos: [],
 };
 
 const EMPTY_ANALYTICS: AnalyticsSummary = {
@@ -240,6 +254,8 @@ const toDentistProfile = (raw: unknown): DentistProfile => {
     specialty: item?.specialty,
     experience: item?.experience,
     rating: item?.rating,
+    showcasePhotos: Array.isArray(item?.showcasePhotos) ? (item.showcasePhotos as MediaItem[]) : [],
+    showcaseVideos: Array.isArray(item?.showcaseVideos) ? (item.showcaseVideos as MediaItem[]) : [],
   };
 };
 
@@ -284,6 +300,7 @@ const toAppointment = (raw: unknown): Appointment => {
     problem: item?.problem ?? item?.reason ?? "",
     status: (item?.status ?? "pending") as AppointmentStatus,
     createdAt: String(item?.createdAt ?? new Date().toISOString()),
+    issueMedia: (item?.issueMedia ?? null) as MediaItem | null,
   };
 };
 
@@ -933,16 +950,61 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const updateProfile = useCallback(
     async (data: Partial<DentistProfile>) => {
+      if (!dentistToken) throw new Error("Not authenticated");
+      const res = await request<{ dentist: unknown }>(
+        "/auth/profile",
+        {
+          method: "PATCH",
+          body: JSON.stringify(data),
+        },
+        dentistToken
+      );
+      const updated = toDentistProfile(res.dentist);
       const merged = {
         ...(currentDentist ?? clinicProfile),
-        ...data,
+        ...updated,
       };
 
       setCurrentDentist(merged);
       setClinicProfile((prev) => ({ ...prev, ...merged }));
       await AsyncStorage.setItem(STORAGE_DENTIST_KEY, JSON.stringify(merged));
     },
-    [clinicProfile, currentDentist]
+    [clinicProfile, currentDentist, dentistToken]
+  );
+
+  const uploadShowcaseMedia = useCallback(
+    async (kind: "photo" | "video", dataUri: string) => {
+      if (!dentistToken) throw new Error("Not authenticated");
+      const res = await request<{ dentist: unknown }>(
+        "/auth/showcase-media",
+        {
+          method: "POST",
+          body: JSON.stringify({ kind, dataUri }),
+        },
+        dentistToken
+      );
+      const updated = toDentistProfile(res.dentist);
+      setCurrentDentist(updated);
+      setClinicProfile((prev) => ({ ...prev, ...updated }));
+      await AsyncStorage.setItem(STORAGE_DENTIST_KEY, JSON.stringify(updated));
+    },
+    [dentistToken]
+  );
+
+  const removeShowcaseMedia = useCallback(
+    async (publicId: string) => {
+      if (!dentistToken) throw new Error("Not authenticated");
+      const res = await request<{ dentist: unknown }>(
+        `/auth/showcase-media?publicId=${encodeURIComponent(publicId)}`,
+        { method: "DELETE" },
+        dentistToken
+      );
+      const updated = toDentistProfile(res.dentist);
+      setCurrentDentist(updated);
+      setClinicProfile((prev) => ({ ...prev, ...updated }));
+      await AsyncStorage.setItem(STORAGE_DENTIST_KEY, JSON.stringify(updated));
+    },
+    [dentistToken]
   );
 
   const addPatient = useCallback(
@@ -1053,6 +1115,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         problem: data.problem,
         reason: data.problem,
         bookFor: data.bookFor ?? "self",
+        issueMedia: data.issueMedia ?? null,
       };
 
       const res = await request<{ appointment: unknown }>(
@@ -1146,6 +1209,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       clearCustomerAlert,
       clearAllCustomerAlerts,
       updateProfile,
+      uploadShowcaseMedia,
+      removeShowcaseMedia,
       addPatient,
       updatePatient,
       deletePatient,
@@ -1193,6 +1258,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateCustomerNotificationPermission,
       updatePatient,
       updateProfile,
+      uploadShowcaseMedia,
+      removeShowcaseMedia,
     ]
   );
 

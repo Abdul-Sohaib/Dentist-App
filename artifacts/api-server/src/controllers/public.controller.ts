@@ -27,6 +27,8 @@ export const getClinicInfo = async (_req: Request, res: Response) => {
       workingDays: dentist.workingDays,
       slotDuration: dentist.slotDuration,
       breakTimes: dentist.breakTimes,
+      showcasePhotos: dentist.showcasePhotos ?? [],
+      showcaseVideos: dentist.showcaseVideos ?? [],
     });
   } catch (error) {
     if (isMongoConnectivityError(error)) {
