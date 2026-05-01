@@ -35,9 +35,9 @@
       [
         "expo-notifications",
         {
-          "defaultChannel": "appointment-alerts",
+          "defaultChannel": "appointment_alerts",
           "sounds": [
-            "./assets/sounds/alert-demo.mp3"
+            "./assets/sounds/alertdemo.mp3"
           ]
         }
       ]

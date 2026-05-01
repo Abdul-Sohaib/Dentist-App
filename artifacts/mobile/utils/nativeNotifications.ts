@@ -3,8 +3,8 @@ import { Platform } from "react-native";
 
 export type NotificationPermissionStatus = "unknown" | "granted" | "denied";
 
-export const APPOINTMENT_ALERTS_CHANNEL_ID = "appointment-alerts";
-export const APPOINTMENT_ALERT_SOUND = "alert-demo.mp3";
+export const APPOINTMENT_ALERTS_CHANNEL_ID = "appointment_alerts";
+export const APPOINTMENT_ALERT_SOUND = "alertdemo.mp3";
 
 const isNativeMobile = Platform.OS === "ios" || Platform.OS === "android";
 let handlerConfigured = false;
