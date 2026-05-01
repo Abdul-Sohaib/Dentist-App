@@ -18,13 +18,21 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
 import BottomNav from "@/components/BottomNav";
+import MediaPreview from "@/components/MediaPreview";
 import { Button, Input } from "@/components/UI";
 
 const DAYS_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const SLOT_OPTIONS = [15, 20, 30, 45, 60];
 
 export default function SettingsScreen() {
-  const { currentDentist, updateProfile, uploadShowcaseMedia, removeShowcaseMedia, logout } = useApp();
+  const {
+    currentDentist,
+    updateProfile,
+    uploadProfilePhoto,
+    uploadShowcaseMedia,
+    removeShowcaseMedia,
+    logout,
+  } = useApp();
   const insets = useSafeAreaInsets();
 
   const [name, setName] = useState(currentDentist?.name ?? "");
@@ -33,6 +41,12 @@ export default function SettingsScreen() {
   const [phone, setPhone] = useState(currentDentist?.phone ?? "");
   const [specialty, setSpecialty] = useState(currentDentist?.specialty ?? "");
   const [bio, setBio] = useState(currentDentist?.bio ?? "");
+  const [website, setWebsite] = useState(currentDentist?.socialLinks?.website ?? "");
+  const [instagram, setInstagram] = useState(currentDentist?.socialLinks?.instagram ?? "");
+  const [facebook, setFacebook] = useState(currentDentist?.socialLinks?.facebook ?? "");
+  const [xLink, setXLink] = useState(currentDentist?.socialLinks?.x ?? "");
+  const [linkedin, setLinkedin] = useState(currentDentist?.socialLinks?.linkedin ?? "");
+  const [youtube, setYoutube] = useState(currentDentist?.socialLinks?.youtube ?? "");
   const [startHour, setStartHour] = useState(currentDentist?.workingHours.start ?? "09:00");
   const [endHour, setEndHour] = useState(currentDentist?.workingHours.end ?? "17:00");
   const [workingDays, setWorkingDays] = useState<number[]>(currentDentist?.workingDays ?? [1,2,3,4,5]);
@@ -55,6 +69,14 @@ export default function SettingsScreen() {
       phone: phone.trim(),
       specialty: specialty.trim(),
       bio: bio.trim(),
+      socialLinks: {
+        website: website.trim(),
+        instagram: instagram.trim(),
+        facebook: facebook.trim(),
+        x: xLink.trim(),
+        linkedin: linkedin.trim(),
+        youtube: youtube.trim(),
+      },
       workingHours: { start: startHour, end: endHour },
       workingDays,
       slotDuration,
@@ -124,6 +146,31 @@ export default function SettingsScreen() {
     }
   };
 
+  const pickProfilePhoto = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      quality: 0.75,
+      allowsMultipleSelection: false,
+      base64: true,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    if (!asset.base64) {
+      Alert.alert("Upload failed", "Unable to read selected file.");
+      return;
+    }
+    const mime = asset.mimeType ?? "image/jpeg";
+    setUploading(true);
+    try {
+      await uploadProfilePhoto(`data:${mime};base64,${asset.base64}`);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      Alert.alert("Upload failed", String(error instanceof Error ? error.message : error));
+    } finally {
+      setUploading(false);
+    }
+  };
+
   return (
     <View style={styles.screen}>
       <KeyboardAvoidingView
@@ -140,15 +187,30 @@ export default function SettingsScreen() {
         >
           <View style={styles.profileHeader}>
             <View style={styles.profileAvatar}>
-              <Text style={styles.profileAvatarText}>
-                {(currentDentist?.name ?? "").replace("Dr. ", "").split(" ").map((w) => w[0]).slice(0, 2).join("")}
-              </Text>
+              {currentDentist?.profilePhotoUrl ? (
+                <Image source={{ uri: currentDentist.profilePhotoUrl }} style={styles.profilePhoto} />
+              ) : (
+                <Text style={styles.profileAvatarText}>
+                  {(currentDentist?.name ?? "").replace("Dr. ", "").split(" ").map((w) => w[0]).slice(0, 2).join("")}
+                </Text>
+              )}
             </View>
             <View>
               <Text style={styles.profileName}>{currentDentist?.name}</Text>
               <Text style={styles.profileClinic}>{currentDentist?.clinicName}</Text>
               <Text style={styles.profileEmail}>{currentDentist?.email}</Text>
             </View>
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Profile Photo</Text>
+            <Text style={styles.profileClinic}>Upload a single photo for the doctor profile.</Text>
+            <Button
+              label={currentDentist?.profilePhotoUrl ? "Change Photo" : "Add Photo"}
+              onPress={pickProfilePhoto}
+              icon="camera"
+              variant="secondary"
+            />
           </View>
 
           <View style={styles.card}>
@@ -206,6 +268,18 @@ export default function SettingsScreen() {
                 onChangeText={setLocation}
                 autoCapitalize="words"
               />
+            </View>
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Social Links</Text>
+            <View style={styles.form}>
+              <Input label="Website" icon="globe" value={website} onChangeText={setWebsite} placeholder="https://..." />
+              <Input label="Instagram" icon="instagram" value={instagram} onChangeText={setInstagram} placeholder="https://instagram.com/..." />
+              <Input label="Facebook" icon="facebook" value={facebook} onChangeText={setFacebook} placeholder="https://facebook.com/..." />
+              <Input label="X / Twitter" icon="message-circle" value={xLink} onChangeText={setXLink} placeholder="https://x.com/..." />
+              <Input label="LinkedIn" icon="link" value={linkedin} onChangeText={setLinkedin} placeholder="https://linkedin.com/..." />
+              <Input label="YouTube" icon="youtube" value={youtube} onChangeText={setYoutube} placeholder="https://youtube.com/..." />
             </View>
           </View>
 
@@ -318,10 +392,11 @@ export default function SettingsScreen() {
             {(currentDentist?.showcaseVideos?.length ?? 0) > 0 ? (
               <View style={styles.form}>
                 {currentDentist?.showcaseVideos?.map((item) => (
-                  <View key={item.publicId} style={styles.mediaRow}>
-                    <Text style={styles.rowLabel}>Video ({Math.ceil(item.durationSeconds ?? 0)}s)</Text>
-                    <Pressable onPress={() => removeShowcaseMedia(item.publicId)}>
+                  <View key={item.publicId} style={styles.videoPreviewCard}>
+                    <MediaPreview item={item} />
+                    <Pressable onPress={() => removeShowcaseMedia(item.publicId)} style={styles.mediaDeleteBtn}>
                       <Feather name="trash-2" size={16} color={Colors.status.cancelled} />
+                      <Text style={styles.mediaDeleteText}>Remove</Text>
                     </Pressable>
                   </View>
                 ))}
@@ -382,6 +457,11 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
     fontSize: 22,
     color: Colors.white,
+  },
+  profilePhoto: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 18,
   },
   profileName: {
     fontFamily: "Inter_700Bold",
@@ -533,6 +613,30 @@ const styles = StyleSheet.create({
     width: 80,
     height: 56,
     borderRadius: 8,
+  },
+  videoPreviewCard: {
+    gap: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 12,
+    padding: 10,
+    backgroundColor: Colors.background.secondary,
+  },
+  mediaDeleteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: 10,
+    paddingVertical: 10,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  mediaDeleteText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
+    color: Colors.status.cancelled,
   },
   rowLabel: {
     fontFamily: "Inter_500Medium",

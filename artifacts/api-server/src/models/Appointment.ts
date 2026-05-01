@@ -19,15 +19,18 @@ const appointmentSchema = new Schema(
     bookedForPhone: { type: String, default: "", trim: true },
     date: { type: String, required: true, index: true },
     timeSlot: { type: String, required: true },
+    appointmentAt: { type: Date, required: true, index: true },
     reason: { type: String, default: "" },
     issueMedia: {
-      type: {
-        url: { type: String, trim: true, default: "" },
-        publicId: { type: String, trim: true, default: "" },
-        resourceType: { type: String, enum: ["image", "video"] },
-        durationSeconds: { type: Number },
-      },
-      default: null,
+      type: [
+        {
+          url: { type: String, trim: true, default: "" },
+          publicId: { type: String, trim: true, default: "" },
+          resourceType: { type: String, enum: ["image", "video"] },
+          durationSeconds: { type: Number },
+        },
+      ],
+      default: [],
     },
     status: {
       type: String,
@@ -36,6 +39,7 @@ const appointmentSchema = new Schema(
       required: true,
       index: true,
     },
+    reminderSent: { type: Boolean, default: false, index: true },
   },
   { timestamps: true }
 );

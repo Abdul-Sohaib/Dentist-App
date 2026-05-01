@@ -22,14 +22,16 @@ export default function AddPatientScreen() {
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [age, setAge] = useState("");
   const [notes, setNotes] = useState("");
-  const [errors, setErrors] = useState<{ name?: string; phone?: string }>({});
+  const [errors, setErrors] = useState<{ name?: string; phone?: string; age?: string }>({});
   const [loading, setLoading] = useState(false);
 
   const validate = (): boolean => {
-    const e: { name?: string; phone?: string } = {};
+    const e: { name?: string; phone?: string; age?: string } = {};
     if (!name.trim()) e.name = "Patient name is required";
     if (!phone.trim()) e.phone = "Phone number is required";
+    if (age.trim() && Number.isNaN(Number(age))) e.age = "Age must be a number";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -41,6 +43,7 @@ export default function AddPatientScreen() {
     const patient = await addPatient({
       name: name.trim(),
       phone: phone.trim(),
+      age: age.trim() ? Number(age) : null,
       notes: notes.trim(),
     });
     setLoading(false);
@@ -113,6 +116,15 @@ export default function AddPatientScreen() {
               onChangeText={(t) => { setPhone(t); setErrors((e) => ({ ...e, phone: undefined })); }}
               error={errors.phone}
               keyboardType="phone-pad"
+            />
+            <Input
+              label="Age"
+              icon="hash"
+              placeholder="e.g. 32"
+              value={age}
+              onChangeText={(t) => { setAge(t); setErrors((e) => ({ ...e, age: undefined })); }}
+              error={errors.age}
+              keyboardType="number-pad"
             />
             <Input
               label="Notes / Problem Description"

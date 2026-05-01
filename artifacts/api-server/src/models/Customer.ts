@@ -7,6 +7,7 @@ const customerSchema = new Schema(
     name: { type: String, required: true, trim: true },
     phone: { type: String, required: true, trim: true, unique: true, index: true },
     password: { type: String, required: true },
+    expoPushToken: { type: String, trim: true, default: "" },
     notificationPermission: {
       type: String,
       enum: NOTIFICATION_PERMISSION_STATUSES,

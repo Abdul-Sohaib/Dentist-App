@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import type { Request, Response } from "express";
 import Customer from "../models/Customer";
+import type { CustomerAuthenticatedRequest } from "../types/auth";
 import { signCustomerToken } from "../utils/jwt";
 import { dbUnavailableMessage, isMongoConnectivityError } from "../utils/db-errors";
 
@@ -9,11 +10,13 @@ const mapCustomer = (customer: {
   name: string;
   phone: string;
   notificationPermission: "unknown" | "granted" | "denied";
+  expoPushToken?: string;
 }) => ({
   id: customer._id,
   name: customer.name,
   phone: customer.phone,
   notificationPermission: customer.notificationPermission,
+  expoPushToken: customer.expoPushToken ?? "",
 });
 
 export const registerCustomer = async (req: Request, res: Response) => {
@@ -41,6 +44,7 @@ export const registerCustomer = async (req: Request, res: Response) => {
       name: String(name).trim(),
       phone: normalizedPhone,
       password: hashedPassword,
+      expoPushToken: "",
       notificationPermission: "unknown",
     });
 
@@ -92,5 +96,34 @@ export const loginCustomer = async (req: Request, res: Response) => {
       return res.status(503).json({ message: dbUnavailableMessage });
     }
     return res.status(500).json({ message: "Login failed", error: String(error) });
+  }
+};
+
+export const updateCustomerPushToken = async (req: CustomerAuthenticatedRequest, res: Response) => {
+  try {
+    const customerId = String(req.customerId ?? "");
+    if (!customerId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const expoPushToken = String(req.body?.expoPushToken ?? "").trim();
+    const customer = await Customer.findByIdAndUpdate(
+      customerId,
+      { $set: { expoPushToken } },
+      { new: true }
+    );
+
+    if (!customer) {
+      return res.status(404).json({ message: "Customer not found" });
+    }
+
+    return res.status(200).json({
+      customer: mapCustomer({ ...customer.toObject(), _id: String(customer._id) }),
+    });
+  } catch (error) {
+    if (isMongoConnectivityError(error)) {
+      return res.status(503).json({ message: dbUnavailableMessage });
+    }
+    return res.status(500).json({ message: "Failed to update push token", error: String(error) });
   }
 };

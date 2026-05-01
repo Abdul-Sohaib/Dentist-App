@@ -67,9 +67,12 @@ export default function CustomerBook() {
   const [bookFor, setBookFor] = useState<"self" | "other">("self");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [age, setAge] = useState("");
   const [problem, setProblem] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [issueMedia, setIssueMedia] = useState<{ kind: "photo" | "video"; dataUri: string; label: string } | null>(null);
+  const [issueMedia, setIssueMedia] = useState<
+    { kind: "photo" | "video"; dataUri: string; label: string }[]
+  >([]);
 
   const cells = useMemo(() => buildCalendarDays(viewYear, viewMonth), [viewYear, viewMonth]);
   const [availableSlots, setAvailableSlots] = useState<string[]>([]);
@@ -156,17 +159,22 @@ export default function CustomerBook() {
       Alert.alert("Invalid Phone", "Please enter a valid phone number.");
       return;
     }
+    if (age.trim() && Number.isNaN(Number(age))) {
+      Alert.alert("Invalid Age", "Please enter a valid age.");
+      return;
+    }
     setSubmitting(true);
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       const apt = await bookAsCustomer({
         patientName: currentName,
         phone: currentPhone,
+        age: age.trim() ? Number(age) : undefined,
         problem: problem.trim(),
         date: selectedDate!,
         time: selectedSlot!,
         bookFor,
-        issueMedia: issueMedia ? { kind: issueMedia.kind, dataUri: issueMedia.dataUri } : undefined,
+        issueMedia: issueMedia.map((item) => ({ kind: item.kind, dataUri: item.dataUri })),
       });
       router.replace({
         pathname: "/customer/success",
@@ -205,11 +213,14 @@ export default function CustomerBook() {
       return;
     }
     const mime = asset.mimeType ?? (kind === "photo" ? "image/jpeg" : "video/mp4");
-    setIssueMedia({
-      kind,
-      dataUri: `data:${mime};base64,${asset.base64}`,
-      label: kind === "photo" ? "Photo attached" : "Video attached",
-    });
+    setIssueMedia((prev) => [
+      ...prev,
+      {
+        kind,
+        dataUri: `data:${mime};base64,${asset.base64}`,
+        label: kind === "photo" ? "Photo attached" : "Video attached",
+      },
+    ]);
   }
 
   return (
@@ -428,6 +439,21 @@ export default function CustomerBook() {
               )}
 
               <View style={styles.formField}>
+                <Text style={styles.label}>Age</Text>
+                <View style={styles.inputWrap}>
+                  <Feather name="hash" size={16} color={Colors.text.muted} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    value={age}
+                    onChangeText={setAge}
+                    placeholder="Optional"
+                    placeholderTextColor={Colors.text.muted}
+                    keyboardType="number-pad"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.formField}>
                 <Text style={styles.label}>Reason / Symptoms</Text>
                 <View style={[styles.inputWrap, styles.textAreaWrap]}>
                   <TextInput
@@ -452,12 +478,21 @@ export default function CustomerBook() {
                     <Text style={styles.bookingTypeText}>Add Video</Text>
                   </Pressable>
                 </View>
-                {issueMedia ? (
-                  <View style={styles.selfBox}>
-                    <Text style={styles.selfText}>{issueMedia.label}</Text>
-                    <Pressable onPress={() => setIssueMedia(null)}>
-                      <Text style={styles.linkRemove}>Remove</Text>
-                    </Pressable>
+                {issueMedia.length > 0 ? (
+                  <View style={styles.mediaList}>
+                    {issueMedia.map((item, index) => (
+                      <View key={`${item.kind}-${index}`} style={styles.mediaRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.selfText}>{item.label}</Text>
+                          {item.kind === "video" ? (
+                            <Text style={styles.mediaHint}>Will play inside the app after upload</Text>
+                          ) : null}
+                        </View>
+                        <Pressable onPress={() => setIssueMedia((prev) => prev.filter((_, i) => i !== index))}>
+                          <Text style={styles.linkRemove}>Remove</Text>
+                        </Pressable>
+                      </View>
+                    ))}
                   </View>
                 ) : null}
               </View>
@@ -695,7 +730,19 @@ const styles = StyleSheet.create({
     gap: 4,
     backgroundColor: Colors.background.secondary,
   },
+  mediaList: { gap: 8 },
+  mediaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 10,
+    padding: 10,
+    backgroundColor: Colors.background.secondary,
+  },
   selfText: { fontFamily: "Inter_500Medium", fontSize: 12, color: Colors.text.secondary },
+  mediaHint: { fontFamily: "Inter_400Regular", fontSize: 11, color: Colors.text.muted, marginTop: 2 },
   linkRemove: { fontFamily: "Inter_600SemiBold", fontSize: 12, color: Colors.status.cancelled },
   label: { fontFamily: "Inter_600SemiBold", fontSize: 13, color: Colors.text.secondary },
   inputWrap: {

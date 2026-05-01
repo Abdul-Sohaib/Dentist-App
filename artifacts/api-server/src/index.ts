@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { connectDB } from "./config/db";
+import { startAppointmentReminderJob } from "./jobs/appointment-reminders";
 
 const startServer = async () => {
   try {
@@ -18,6 +19,7 @@ const startServer = async () => {
     }
 
     app.listen(port, () => {
+      startAppointmentReminderJob();
       logger.info({ port }, "Server running successfully");
     });
   } catch (err) {

@@ -3,8 +3,7 @@ import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useMemo, useState } from "react";
 import {
-  Image,
-  Linking,
+  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -16,9 +15,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { Appointment, useApp } from "@/context/AppContext";
 import BottomNav from "@/components/BottomNav";
+import MediaPreview from "@/components/MediaPreview";
 import { EmptyState, StatusBadge } from "@/components/UI";
+import { exportAppointmentsExcel } from "@/utils/exportAppointmentsExcel";
 
 type Filter = "all" | Appointment["status"];
+type SortOrder = "newest" | "oldest";
 const FILTERS: { label: string; value: Filter }[] = [
   { label: "All", value: "all" },
   { label: "Pending", value: "pending" },
@@ -28,26 +30,72 @@ const FILTERS: { label: string; value: Filter }[] = [
 ];
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const FULL_MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
 function fmtDate(s: string) {
   const d = new Date(s + "T00:00:00");
   return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
+function dateKey(date: string) {
+  return `${date.slice(0, 7)}`;
+}
+function formatMonthLabel(key: string) {
+  const [year, month] = key.split("-");
+  const monthIndex = Number(month) - 1;
+  return `${FULL_MONTHS[monthIndex] ?? month} ${year}`;
+}
+function formatDateKeyLabel(date: string) {
+  const d = new Date(`${date}T00:00:00`);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
 
 export default function AppointmentsScreen() {
   const { appointments, patients, updateAppointmentStatus, deleteAppointment, refreshDentistDashboard } = useApp();
   const insets = useSafeAreaInsets();
   const [filter, setFilter] = useState<Filter>("all");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
+  const [monthFilter, setMonthFilter] = useState<string>("all");
+  const [dateFilter, setDateFilter] = useState<string>("all");
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const today = new Date().toISOString().split("T")[0];
+  const today = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`;
+
+  const monthOptions = useMemo(() => {
+    const keys = new Set<string>();
+    for (const apt of appointments) {
+      keys.add(dateKey(apt.date));
+    }
+    keys.add(dateKey(today));
+    return Array.from(keys)
+      .sort((a, b) => b.localeCompare(a))
+      .map((key) => ({ key, label: formatMonthLabel(key) }));
+  }, [appointments, today]);
+
+  const dayOptions = useMemo(() => {
+    const base = monthFilter === "all"
+      ? appointments
+      : appointments.filter((apt) => dateKey(apt.date) === monthFilter);
+    const keys = new Set(base.map((apt) => apt.date));
+    return Array.from(keys).sort((a, b) => b.localeCompare(a));
+  }, [appointments, monthFilter]);
 
   const filtered = useMemo(() => {
     let list = filter === "all" ? appointments : appointments.filter((a) => a.status === filter);
+    if (monthFilter !== "all") {
+      list = list.filter((apt) => dateKey(apt.date) === monthFilter);
+    }
+    if (dateFilter !== "all") {
+      list = list.filter((apt) => apt.date === dateFilter);
+    }
     return [...list].sort((a, b) => {
-      const dateCompare = b.date.localeCompare(a.date);
+      const dateCompare = sortOrder === "newest" ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date);
       if (dateCompare !== 0) return dateCompare;
-      return a.time.localeCompare(b.time);
+      return sortOrder === "newest" ? a.time.localeCompare(b.time) : b.time.localeCompare(a.time);
     });
-  }, [appointments, filter]);
+  }, [appointments, dateFilter, filter, monthFilter, sortOrder]);
+
+  const exportDate = dateFilter !== "all" ? dateFilter : "";
 
   const grouped = useMemo(() => {
     const map = new Map<string, typeof filtered>();
@@ -71,6 +119,30 @@ export default function AppointmentsScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } finally {
       setIsRefreshing(false);
+    }
+  };
+
+  const handleExport = async () => {
+    if (!exportDate) {
+      Alert.alert("Select a date", "Choose a specific date before exporting the spreadsheet.");
+      return;
+    }
+
+    const dailyAppointments = appointments.filter((apt) => apt.date === exportDate);
+
+    if (dailyAppointments.length === 0) {
+      Alert.alert("No data", "There are no appointments for the selected day.");
+      return;
+    }
+
+    try {
+      await exportAppointmentsExcel({
+        date: exportDate,
+        appointments: dailyAppointments,
+        patients,
+      });
+    } catch (error) {
+      Alert.alert("Export failed", String(error instanceof Error ? error.message : error));
     }
   };
 
@@ -128,6 +200,87 @@ export default function AppointmentsScreen() {
             );
           })}
         </ScrollView>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.monthRow}
+        >
+          <Pressable
+            onPress={() => {
+              setMonthFilter("all");
+              setDateFilter("all");
+            }}
+            style={[styles.monthChip, monthFilter === "all" && styles.monthChipActive]}
+          >
+            <Text style={[styles.monthText, monthFilter === "all" && styles.monthTextActive]}>
+              All Months
+            </Text>
+          </Pressable>
+          {monthOptions.map((item) => (
+            <Pressable
+              key={item.key}
+              onPress={() => {
+                setMonthFilter(item.key);
+                setDateFilter("all");
+              }}
+              style={[styles.monthChip, monthFilter === item.key && styles.monthChipActive]}
+            >
+              <Text style={[styles.monthText, monthFilter === item.key && styles.monthTextActive]}>
+                {item.label}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.dateRow}
+        >
+          <Pressable
+            onPress={() => setDateFilter("all")}
+            style={[styles.dateChip, dateFilter === "all" && styles.dateChipActive]}
+          >
+            <Text style={[styles.dateText, dateFilter === "all" && styles.dateTextActive]}>
+              All Dates
+            </Text>
+          </Pressable>
+          {dayOptions.map((date) => (
+            <Pressable
+              key={date}
+              onPress={() => setDateFilter(date)}
+              style={[styles.dateChip, dateFilter === date && styles.dateChipActive]}
+            >
+              <Text style={[styles.dateText, dateFilter === date && styles.dateTextActive]}>
+                {formatDateKeyLabel(date)}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+
+        <View style={styles.controlRow}>
+          <Pressable
+            onPress={() => setSortOrder((prev) => (prev === "newest" ? "oldest" : "newest"))}
+            style={styles.controlBtn}
+          >
+            <Feather name={sortOrder === "newest" ? "arrow-down" : "arrow-up"} size={14} color={Colors.primary} />
+            <Text style={styles.controlBtnText}>
+              {sortOrder === "newest" ? "Newest First" : "Oldest First"}
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={handleExport}
+            disabled={dateFilter === "all"}
+            style={[
+              styles.exportBtn,
+              dateFilter === "all" && styles.exportBtnDisabled,
+            ]}
+          >
+            <Feather name="download" size={14} color={Colors.white} />
+            <Text style={styles.exportBtnText}>Export XLSX</Text>
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView
@@ -174,22 +327,12 @@ export default function AppointmentsScreen() {
                         <StatusBadge status={apt.status} />
                       </View>
                     </View>
-                    {apt.issueMedia?.url ? (
+                    {apt.issueMedia?.length ? (
                       <View style={styles.issueMediaWrap}>
                         <Text style={styles.issueMediaTitle}>Patient Issue Media</Text>
-                        {apt.issueMedia.resourceType === "image" ? (
-                          <Image source={{ uri: apt.issueMedia.url }} style={styles.issueImage} />
-                        ) : (
-                          <Pressable
-                            onPress={() => Linking.openURL(apt.issueMedia?.url ?? "")}
-                            style={({ pressed }) => [styles.issueVideoBtn, { opacity: pressed ? 0.82 : 1 }]}
-                          >
-                            <Feather name="play-circle" size={16} color={Colors.primary} />
-                            <Text style={styles.issueVideoText}>
-                              Play patient video ({Math.ceil(apt.issueMedia.durationSeconds ?? 0)}s)
-                            </Text>
-                          </Pressable>
-                        )}
+                        {apt.issueMedia.map((item, index) => (
+                          <MediaPreview key={`${item.publicId}-${index}`} item={item} />
+                        ))}
                       </View>
                     ) : null}
 
@@ -307,6 +450,8 @@ const styles = StyleSheet.create({
   },
   addBtnText: { fontFamily: "Inter_600SemiBold", fontSize: 14, color: Colors.white },
   filtersRow: { paddingVertical: 4, gap: 8 },
+  monthRow: { paddingVertical: 4, gap: 8 },
+  dateRow: { paddingVertical: 4, gap: 8 },
   filterChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -326,6 +471,67 @@ const styles = StyleSheet.create({
   },
   filterTextActive: { color: Colors.white },
   filterCount: { fontFamily: "Inter_400Regular", fontSize: 12 },
+  monthChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  monthChipActive: {
+    backgroundColor: Colors.primaryLight,
+    borderColor: Colors.primary,
+  },
+  monthText: { fontFamily: "Inter_500Medium", fontSize: 13, color: Colors.text.secondary },
+  monthTextActive: { color: Colors.primary },
+  dateChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 18,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  dateChipActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  dateText: { fontFamily: "Inter_500Medium", fontSize: 12, color: Colors.text.secondary },
+  dateTextActive: { color: Colors.white },
+  controlRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 6,
+  },
+  controlBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderRadius: 12,
+    paddingVertical: 10,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  controlBtnText: { fontFamily: "Inter_600SemiBold", fontSize: 12, color: Colors.primary },
+  exportBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderRadius: 12,
+    paddingVertical: 10,
+    backgroundColor: Colors.primary,
+  },
+  exportBtnDisabled: {
+    backgroundColor: Colors.border,
+  },
+  exportBtnText: { fontFamily: "Inter_700Bold", fontSize: 12, color: Colors.white },
   scroll: { paddingHorizontal: 20, paddingTop: 12, gap: 4 },
   dateGroup: { marginBottom: 16 },
   dateLabelRow: { marginBottom: 10 },

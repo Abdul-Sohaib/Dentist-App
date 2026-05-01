@@ -5,6 +5,7 @@ import Dentist from "../models/Dentist";
 import NotificationAlert from "../models/NotificationAlert";
 import Patient from "../models/Patient";
 import type { CustomerAuthenticatedRequest } from "../types/auth";
+import { buildAppointmentDateTime } from "../utils/appointment-time";
 import { generateSlots } from "../utils/slots";
 import { dbUnavailableMessage, isMongoConnectivityError } from "../utils/db-errors";
 import { uploadBase64ToCloudinary } from "../utils/cloudinary";
@@ -28,10 +29,15 @@ const mapAppointment = (appointment: any) => ({
   date: appointment.date,
   timeSlot: appointment.timeSlot,
   time: appointment.timeSlot,
+  appointmentAt: appointment.appointmentAt,
   reason: appointment.reason ?? "",
   problem: appointment.reason ?? "",
   status: toCustomerFacingStatus(appointment.status),
-  issueMedia: appointment.issueMedia ?? null,
+  issueMedia: Array.isArray(appointment.issueMedia)
+    ? appointment.issueMedia
+    : appointment.issueMedia
+    ? [appointment.issueMedia]
+    : [],
   createdAt: appointment.createdAt,
   updatedAt: appointment.updatedAt,
 });
@@ -97,6 +103,8 @@ export const getCustomerDashboard = async (req: CustomerAuthenticatedRequest, re
             phone: dentist.phone,
             bio: dentist.bio,
             location: dentist.location,
+            profilePhotoUrl: dentist.profilePhotoUrl ?? "",
+            socialLinks: dentist.socialLinks ?? {},
             workingHours: dentist.workingHours,
             workingDays: dentist.workingDays,
             slotDuration: dentist.slotDuration,
@@ -263,7 +271,7 @@ export const createCustomerAppointment = async (req: CustomerAuthenticatedReques
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const { patientName, phone, date, timeSlot, reason, problem, bookFor, issueMedia } = req.body;
+    const { patientName, phone, date, timeSlot, reason, problem, bookFor, issueMedia, age } = req.body;
 
     if (!date || !timeSlot || !problem) {
       return res.status(400).json({ message: "date, timeSlot and problem are required" });
@@ -306,31 +314,37 @@ export const createCustomerAppointment = async (req: CustomerAuthenticatedReques
         name: bookingName,
         phone: bookingPhone,
         notes: reason ?? problem ?? "",
+        ...(typeof age === "number" ? { age } : {}),
         dentistId: dentist._id,
         lastVisit: "",
       });
+    } else if (typeof age === "number") {
+      patient.age = age;
+      await patient.save();
     }
 
-    let issueMediaPayload: Record<string, unknown> | null = null;
-    if (issueMedia?.dataUri && issueMedia?.kind) {
-      const kind = String(issueMedia.kind);
+    const mediaInputs = Array.isArray(issueMedia) ? issueMedia : issueMedia ? [issueMedia] : [];
+    const issueMediaPayload: Record<string, unknown>[] = [];
+    for (const media of mediaInputs) {
+      if (!media?.dataUri || !media?.kind) continue;
+      const kind = String(media.kind);
       if (!["photo", "video"].includes(kind)) {
         return res.status(400).json({ message: "Invalid issue media kind" });
       }
       const upload = await uploadBase64ToCloudinary(
-        String(issueMedia.dataUri),
+        String(media.dataUri),
         kind === "photo" ? "image" : "video",
         "dentbook/issues"
       );
       if (upload.resourceType === "video" && (upload.durationSeconds ?? 0) > 60) {
         return res.status(400).json({ message: "Issue video must be 60 seconds or less" });
       }
-      issueMediaPayload = {
+      issueMediaPayload.push({
         url: upload.url,
         publicId: upload.publicId,
         resourceType: upload.resourceType,
         durationSeconds: upload.durationSeconds,
-      };
+      });
     }
 
     const ticketId = await generateTicketId();
@@ -344,9 +358,11 @@ export const createCustomerAppointment = async (req: CustomerAuthenticatedReques
       bookedForPhone: bookingPhone,
       date,
       timeSlot,
+      appointmentAt: buildAppointmentDateTime(date, timeSlot),
       reason: reason ?? problem ?? "",
       issueMedia: issueMediaPayload,
       status: "pending",
+      reminderSent: false,
     });
 
     await NotificationAlert.create({
@@ -368,6 +384,35 @@ export const createCustomerAppointment = async (req: CustomerAuthenticatedReques
       return res.status(503).json({ message: dbUnavailableMessage });
     }
     return res.status(500).json({ message: "Failed to book appointment", error: String(error) });
+  }
+};
+
+export const cancelCustomerAppointment = async (req: CustomerAuthenticatedRequest, res: Response) => {
+  try {
+    const customerId = String(req.customerId ?? "");
+    const appointmentId = String(req.params.id ?? "");
+
+    if (!customerId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const deleted = await Appointment.findOneAndDelete({
+      _id: appointmentId,
+      bookedByCustomerId: customerId,
+    });
+
+    if (!deleted) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    await NotificationAlert.deleteMany({ appointmentId: deleted._id });
+
+    return res.status(200).json({ message: "Appointment cancelled and removed", removed: true });
+  } catch (error) {
+    if (isMongoConnectivityError(error)) {
+      return res.status(503).json({ message: dbUnavailableMessage });
+    }
+    return res.status(500).json({ message: "Failed to cancel appointment", error: String(error) });
   }
 };
 

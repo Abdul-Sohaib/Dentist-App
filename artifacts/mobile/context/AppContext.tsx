@@ -11,6 +11,7 @@ import React, {
 import { Asset } from "expo-asset";
 import { AppState } from "react-native";
 import { API_BASE_URL } from "@/constants/api";
+import { registerExpoPushTokenAsync } from "@/utils/pushNotifications";
 import {
   cancelNativeReminders,
   getNativeNotificationPermission,
@@ -36,6 +37,15 @@ export interface DentistProfile {
   specialty?: string;
   experience?: number;
   rating?: number;
+  profilePhotoUrl?: string;
+  socialLinks?: {
+    website?: string;
+    instagram?: string;
+    facebook?: string;
+    x?: string;
+    linkedin?: string;
+    youtube?: string;
+  };
   showcasePhotos?: MediaItem[];
   showcaseVideos?: MediaItem[];
 }
@@ -57,6 +67,7 @@ export interface Patient {
   id: string;
   name: string;
   phone: string;
+  age?: number | null;
   notes: string;
   createdAt: string;
   lastVisit?: string;
@@ -81,7 +92,7 @@ export interface Appointment {
   problem: string;
   status: AppointmentStatus;
   createdAt: string;
-  issueMedia?: MediaItem | null;
+  issueMedia?: MediaItem[];
 }
 
 export interface CustomerAlert {
@@ -124,24 +135,27 @@ interface AppContextType {
   clearCustomerAlert: (alertId: string) => Promise<void>;
   clearAllCustomerAlerts: () => Promise<void>;
   updateProfile: (data: Partial<DentistProfile>) => Promise<void>;
+  uploadProfilePhoto: (dataUri: string) => Promise<void>;
   uploadShowcaseMedia: (kind: "photo" | "video", dataUri: string) => Promise<void>;
   removeShowcaseMedia: (publicId: string) => Promise<void>;
   addPatient: (data: Omit<Patient, "id" | "createdAt">) => Promise<Patient>;
   updatePatient: (id: string, data: Partial<Patient>) => Promise<void>;
   deletePatient: (id: string) => Promise<void>;
-  addAppointment: (data: Omit<Appointment, "id" | "createdAt" | "status">) => Promise<Appointment>;
+  addAppointment: (data: Omit<Appointment, "id" | "createdAt" | "status"> & { status?: Appointment["status"] }) => Promise<Appointment>;
   bookAsCustomer: (data: {
     patientName?: string;
     name?: string;
     phone?: string;
+    age?: number;
     problem: string;
     date: string;
     time: string;
     bookFor?: "self" | "other";
-    issueMedia?: { kind: "photo" | "video"; dataUri: string };
+    issueMedia?: { kind: "photo" | "video"; dataUri: string }[];
   }) => Promise<Appointment>;
   updateAppointmentStatus: (id: string, status: Appointment["status"]) => Promise<void>;
   deleteAppointment: (id: string) => Promise<void>;
+  cancelCustomerAppointment: (id: string) => Promise<void>;
   getAvailableSlots: (date: string) => Promise<string[]>;
   requestDentistNotificationPermission: () => Promise<NotificationPermissionStatus>;
   refreshAll: () => Promise<void>;
@@ -224,6 +238,8 @@ const EMPTY_DENTIST: DentistProfile = {
   slotDuration: 30,
   breakTimes: [{ start: "13:00", end: "14:00" }],
   bio: "",
+  profilePhotoUrl: "",
+  socialLinks: {},
   showcasePhotos: [],
   showcaseVideos: [],
 };
@@ -251,6 +267,8 @@ const toDentistProfile = (raw: unknown): DentistProfile => {
     slotDuration: item?.slotDuration ?? 30,
     breakTimes: item?.breakTimes ?? item?.breaks ?? [],
     bio: item?.bio ?? "",
+    profilePhotoUrl: item?.profilePhotoUrl ?? "",
+    socialLinks: item?.socialLinks ?? {},
     specialty: item?.specialty,
     experience: item?.experience,
     rating: item?.rating,
@@ -278,6 +296,7 @@ const toPatient = (raw: unknown): Patient => {
     name: item?.name ?? "",
     phone: item?.phone ?? "",
     notes: item?.notes ?? "",
+    age: typeof item?.age === "number" ? item.age : null,
     createdAt: String(item?.createdAt ?? new Date().toISOString()),
     lastVisit: item?.lastVisit ?? "",
   };
@@ -300,7 +319,11 @@ const toAppointment = (raw: unknown): Appointment => {
     problem: item?.problem ?? item?.reason ?? "",
     status: (item?.status ?? "pending") as AppointmentStatus,
     createdAt: String(item?.createdAt ?? new Date().toISOString()),
-    issueMedia: (item?.issueMedia ?? null) as MediaItem | null,
+    issueMedia: Array.isArray(item?.issueMedia)
+      ? (item.issueMedia as MediaItem[])
+      : item?.issueMedia
+      ? [item.issueMedia as MediaItem]
+      : [],
   };
 };
 
@@ -400,6 +423,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const initializedAlertIdsRef = useRef<Set<string>>(new Set());
   const hasInitializedAlertTrackingRef = useRef(false);
   const lastReminderSyncSignatureRef = useRef("");
+  const lastExpoPushTokenSyncRef = useRef("");
   const [analytics, setAnalytics] = useState<AnalyticsSummary>(EMPTY_ANALYTICS);
 
   const clearDentistState = useCallback(() => {
@@ -827,11 +851,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(async () => {
+    if (dentistToken) {
+      await request<{ message: string }>(
+        "/auth/push-token",
+        {
+          method: "POST",
+          body: JSON.stringify({ expoPushToken: "" }),
+        },
+        dentistToken
+      ).catch(() => {});
+    }
     const reminderIdsRaw = await AsyncStorage.getItem(STORAGE_LOCAL_REMINDER_IDS_KEY);
     const reminderIds = reminderIdsRaw ? (JSON.parse(reminderIdsRaw) as string[]) : [];
     await cancelNativeReminders(reminderIds);
     await AsyncStorage.removeItem(STORAGE_LOCAL_REMINDER_IDS_KEY);
     lastReminderSyncSignatureRef.current = "";
+    lastExpoPushTokenSyncRef.current = "";
     clearDentistState();
     setActiveRole(null);
     await AsyncStorage.multiRemove([
@@ -894,11 +929,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const customerLogout = useCallback(async () => {
+    if (customerToken) {
+      await request<{ message: string }>(
+        "/customer/auth/push-token",
+        {
+          method: "POST",
+          body: JSON.stringify({ expoPushToken: "" }),
+        },
+        customerToken
+      ).catch(() => {});
+    }
     const reminderIdsRaw = await AsyncStorage.getItem(STORAGE_LOCAL_REMINDER_IDS_KEY);
     const reminderIds = reminderIdsRaw ? (JSON.parse(reminderIdsRaw) as string[]) : [];
     await cancelNativeReminders(reminderIds);
     await AsyncStorage.removeItem(STORAGE_LOCAL_REMINDER_IDS_KEY);
     lastReminderSyncSignatureRef.current = "";
+    lastExpoPushTokenSyncRef.current = "";
     clearCustomerState();
     setActiveRole(null);
     await AsyncStorage.multiRemove([
@@ -928,6 +974,76 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
     [customerToken, refreshCustomerDashboard]
   );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      if (activeRole !== "dentist" && activeRole !== "customer") {
+        return;
+      }
+
+      const authToken = activeRole === "dentist" ? dentistToken : customerToken;
+      const userId =
+        activeRole === "dentist"
+          ? currentDentist?.id ?? ""
+          : currentCustomer?.id ?? "";
+
+      if (!authToken) {
+        return;
+      }
+
+      try {
+        const { expoPushToken, permission } = await registerExpoPushTokenAsync();
+        if (cancelled) return;
+
+        if (activeRole === "dentist" && permission !== "unknown" && dentistNotificationPermission !== permission) {
+          setDentistNotificationPermission(permission);
+          await AsyncStorage.setItem(STORAGE_DENTIST_NOTIFICATION_PERMISSION_KEY, permission);
+        }
+
+        if (
+          activeRole === "customer" &&
+          permission !== "unknown" &&
+          currentCustomer?.notificationPermission !== permission
+        ) {
+          await updateCustomerNotificationPermission(permission === "granted" ? "granted" : "denied");
+        }
+
+        const signature = `${activeRole}:${userId || "unknown"}:${expoPushToken ?? "none"}`;
+        if (signature === lastExpoPushTokenSyncRef.current) {
+          return;
+        }
+
+        const endpoint = activeRole === "dentist" ? "/auth/push-token" : "/customer/auth/push-token";
+        await request<{ message: string }>(
+          endpoint,
+          {
+            method: "POST",
+            body: JSON.stringify({ expoPushToken: expoPushToken ?? "" }),
+          },
+          authToken
+        );
+
+        lastExpoPushTokenSyncRef.current = signature;
+      } catch (error) {
+        console.warn("Failed to sync push token", error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeRole,
+    currentCustomer?.id,
+    currentCustomer?.notificationPermission,
+    currentDentist?.id,
+    dentistNotificationPermission,
+    customerToken,
+    dentistToken,
+    updateCustomerNotificationPermission,
+  ]);
 
   const clearCustomerAlert = useCallback(
     async (alertId: string) => {
@@ -970,6 +1086,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       await AsyncStorage.setItem(STORAGE_DENTIST_KEY, JSON.stringify(merged));
     },
     [clinicProfile, currentDentist, dentistToken]
+  );
+
+  const uploadProfilePhoto = useCallback(
+    async (dataUri: string) => {
+      if (!dentistToken) throw new Error("Not authenticated");
+      const res = await request<{ dentist: unknown }>(
+        "/auth/profile-photo",
+        {
+          method: "POST",
+          body: JSON.stringify({ dataUri }),
+        },
+        dentistToken
+      );
+      const updated = toDentistProfile(res.dentist);
+      setCurrentDentist(updated);
+      setClinicProfile((prev) => ({ ...prev, ...updated }));
+      await AsyncStorage.setItem(STORAGE_DENTIST_KEY, JSON.stringify(updated));
+    },
+    [dentistToken]
   );
 
   const uploadShowcaseMedia = useCallback(
@@ -1064,7 +1199,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addAppointment = useCallback(
-    async (data: Omit<Appointment, "id" | "createdAt" | "status">) => {
+    async (data: Omit<Appointment, "id" | "createdAt" | "status"> & { status?: Appointment["status"] }) => {
       if (!dentistToken) throw new Error("Not authenticated");
 
       const res = await request<{ appointment: unknown }>(
@@ -1076,6 +1211,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             date: data.date,
             timeSlot: data.time,
             reason: data.problem,
+            status: data.status ?? "pending",
           }),
         },
         dentistToken
@@ -1098,10 +1234,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       patientName?: string;
       name?: string;
       phone?: string;
+      age?: number;
       problem: string;
       date: string;
       time: string;
       bookFor?: "self" | "other";
+      issueMedia?: { kind: "photo" | "video"; dataUri: string }[];
     }) => {
       if (!customerToken) {
         throw new Error("Please login first to book an appointment");
@@ -1110,12 +1248,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const payload = {
         patientName: data.patientName ?? data.name ?? "",
         phone: data.phone ?? "",
+        age: typeof data.age === "number" ? data.age : undefined,
         date: data.date,
         timeSlot: data.time,
         problem: data.problem,
         reason: data.problem,
         bookFor: data.bookFor ?? "self",
-        issueMedia: data.issueMedia ?? null,
+        issueMedia: data.issueMedia ?? [],
       };
 
       const res = await request<{ appointment: unknown }>(
@@ -1139,7 +1278,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     async (id: string, status: Appointment["status"]) => {
       if (!dentistToken) throw new Error("Not authenticated");
 
-      const res = await request<{ appointment: unknown }>(
+      const res = await request<{ appointment?: unknown; removed?: boolean }>(
         `/appointments/${id}`,
         {
           method: "PATCH",
@@ -1148,8 +1287,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         dentistToken
       );
 
-      const updated = toAppointment(res.appointment);
-      setAppointments((prev) => prev.map((appointment) => (appointment.id === id ? updated : appointment)));
+      if ((res as { removed?: boolean }).removed) {
+        setAppointments((prev) => prev.filter((appointment) => appointment.id !== id));
+      } else {
+        const updated = toAppointment((res as { appointment: unknown }).appointment);
+        setAppointments((prev) => prev.map((appointment) => (appointment.id === id ? updated : appointment)));
+      }
 
       const analyticsRes = await request<AnalyticsSummary>("/analytics", {}, dentistToken);
       setAnalytics(analyticsRes);
@@ -1167,6 +1310,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setAnalytics(analyticsRes);
     },
     [dentistToken]
+  );
+
+  const cancelCustomerAppointment = useCallback(
+    async (id: string) => {
+      if (!customerToken) throw new Error("Customer not authenticated");
+      await request<{ message: string }>(`/customer/appointments/${id}`, { method: "DELETE" }, customerToken);
+      setCustomerAppointments((prev) => prev.filter((appointment) => appointment.id !== id));
+      setCustomerAlerts((prev) => prev.filter((alert) => alert.appointmentId !== id));
+    },
+    [customerToken]
   );
 
   const getAvailableSlots = useCallback(
@@ -1209,6 +1362,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       clearCustomerAlert,
       clearAllCustomerAlerts,
       updateProfile,
+      uploadProfilePhoto,
       uploadShowcaseMedia,
       removeShowcaseMedia,
       addPatient,
@@ -1218,6 +1372,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       bookAsCustomer,
       updateAppointmentStatus,
       deleteAppointment,
+      cancelCustomerAppointment,
       getAvailableSlots,
       requestDentistNotificationPermission,
       refreshAll,
@@ -1242,6 +1397,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       clearCustomerAlert,
       customerRegister,
       deleteAppointment,
+      cancelCustomerAppointment,
       deletePatient,
       dentistNotificationPermission,
       getAvailableSlots,
@@ -1258,6 +1414,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateCustomerNotificationPermission,
       updatePatient,
       updateProfile,
+      uploadProfilePhoto,
       uploadShowcaseMedia,
       removeShowcaseMedia,
     ]

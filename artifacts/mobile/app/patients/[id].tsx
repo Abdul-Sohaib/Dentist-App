@@ -47,12 +47,14 @@ export default function PatientProfileScreen() {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
+  const [editAge, setEditAge] = useState("");
   const [editNotes, setEditNotes] = useState("");
 
   const startEdit = () => {
     if (!patient) return;
     setEditName(patient.name);
     setEditPhone(patient.phone);
+    setEditAge(patient.age != null ? String(patient.age) : "");
     setEditNotes(patient.notes);
     setEditing(true);
   };
@@ -62,6 +64,7 @@ export default function PatientProfileScreen() {
     await updatePatient(id, {
       name: editName.trim(),
       phone: editPhone.trim(),
+      age: editAge.trim() ? Number(editAge) : null,
       notes: editNotes.trim(),
     });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -174,6 +177,17 @@ export default function PatientProfileScreen() {
                 />
               </View>
               <View style={styles.editField}>
+                <Text style={styles.editLabel}>Age</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editAge}
+                  onChangeText={setEditAge}
+                  placeholder="Age"
+                  placeholderTextColor={Colors.text.muted}
+                  keyboardType="number-pad"
+                />
+              </View>
+              <View style={styles.editField}>
                 <Text style={styles.editLabel}>Notes</Text>
                 <TextInput
                   style={[styles.editInput, { minHeight: 80, textAlignVertical: "top" }]}
@@ -192,6 +206,7 @@ export default function PatientProfileScreen() {
             <>
               <Text style={styles.profileName}>{patient.name}</Text>
               <Text style={styles.profilePhone}>{patient.phone}</Text>
+              {patient.age != null ? <Text style={styles.profilePhone}>Age: {patient.age}</Text> : null}
               <Text style={styles.profileSince}>
                 Patient since {fmtDate(patient.createdAt)}
               </Text>

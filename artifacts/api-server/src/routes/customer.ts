@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   clearAllCustomerAlerts,
   clearCustomerAlert,
+  cancelCustomerAppointment,
   createCustomerAppointment,
   getCustomerAlerts,
   getCustomerAppointments,
@@ -18,6 +19,7 @@ customerRouter.use(customerAuthMiddleware);
 customerRouter.get("/dashboard", getCustomerDashboard);
 customerRouter.get("/appointments", getCustomerAppointments);
 customerRouter.post("/appointments", createCustomerAppointment);
+customerRouter.delete("/appointments/:id", cancelCustomerAppointment);
 customerRouter.get("/available-slots", getCustomerAvailableSlots);
 customerRouter.get("/alerts", getCustomerAlerts);
 customerRouter.delete("/alerts", clearAllCustomerAlerts);

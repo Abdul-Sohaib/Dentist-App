@@ -8,6 +8,7 @@ const mapPatient = (patient: {
   name: string;
   phone: string;
   notes: string;
+  age?: number | null;
   createdAt: Date;
   updatedAt: Date;
   lastVisit?: string;
@@ -16,6 +17,7 @@ const mapPatient = (patient: {
   name: patient.name,
   phone: patient.phone,
   notes: patient.notes,
+  age: typeof patient.age === "number" ? patient.age : null,
   createdAt: patient.createdAt,
   updatedAt: patient.updatedAt,
   lastVisit: patient.lastVisit ?? "",
@@ -23,7 +25,7 @@ const mapPatient = (patient: {
 
 export const createPatient = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { name, phone, notes } = req.body;
+    const { name, phone, notes, age } = req.body;
 
     if (!name || !phone) {
       return res.status(400).json({ message: "name and phone are required" });
@@ -33,6 +35,7 @@ export const createPatient = async (req: AuthenticatedRequest, res: Response) =>
       name,
       phone,
       notes: notes ?? "",
+      ...(typeof age === "number" ? { age } : {}),
       dentistId: req.dentistId,
       lastVisit: "",
     });
@@ -82,6 +85,7 @@ export const updatePatientById = async (req: AuthenticatedRequest, res: Response
           ...(req.body.name ? { name: req.body.name } : {}),
           ...(req.body.phone ? { phone: req.body.phone } : {}),
           ...(typeof req.body.notes === "string" ? { notes: req.body.notes } : {}),
+          ...(typeof req.body.age === "number" ? { age: req.body.age } : {}),
         },
       },
       { new: true }

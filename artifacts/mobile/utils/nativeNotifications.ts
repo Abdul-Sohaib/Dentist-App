@@ -3,6 +3,9 @@ import { Platform } from "react-native";
 
 export type NotificationPermissionStatus = "unknown" | "granted" | "denied";
 
+export const APPOINTMENT_ALERTS_CHANNEL_ID = "appointment-alerts";
+export const APPOINTMENT_ALERT_SOUND = "alert-demo.mp3";
+
 const isNativeMobile = Platform.OS === "ios" || Platform.OS === "android";
 let handlerConfigured = false;
 let channelConfigured = false;
@@ -15,6 +18,8 @@ const ensureHandlerConfigured = () => {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
       shouldPlaySound: true,
       shouldSetBadge: false,
     }),
@@ -22,17 +27,17 @@ const ensureHandlerConfigured = () => {
   handlerConfigured = true;
 };
 
-const ensureAndroidChannel = async () => {
+export const ensureAppointmentAlertsChannel = async () => {
   if (!isNativeMobile || Platform.OS !== "android" || channelConfigured) {
     return;
   }
 
-  await Notifications.setNotificationChannelAsync("appointment-reminders", {
-    name: "Appointment reminders",
+  await Notifications.setNotificationChannelAsync(APPOINTMENT_ALERTS_CHANNEL_ID, {
+    name: "Appointment alerts",
     importance: Notifications.AndroidImportance.HIGH,
     vibrationPattern: [0, 250, 250, 250],
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-    sound: "default",
+    sound: APPOINTMENT_ALERT_SOUND,
   });
   channelConfigured = true;
 };
@@ -53,7 +58,7 @@ export const getNativeNotificationPermission = async (): Promise<NotificationPer
   }
 
   ensureHandlerConfigured();
-  const permission = await Notifications.getPermissionsAsync();
+  const permission = (await Notifications.getPermissionsAsync()) as any;
   return normalizePermissionStatus(permission.status);
 };
 
@@ -63,17 +68,17 @@ export const requestNativeNotificationPermission = async (): Promise<Notificatio
   }
 
   ensureHandlerConfigured();
-  const existing = await Notifications.getPermissionsAsync();
+  const existing = (await Notifications.getPermissionsAsync()) as any;
   if (existing.status === "granted") {
-    await ensureAndroidChannel();
+    await ensureAppointmentAlertsChannel();
     return "granted";
   }
 
-  const requested = await Notifications.requestPermissionsAsync();
+  const requested = (await Notifications.requestPermissionsAsync()) as any;
   const status = normalizePermissionStatus(requested.status);
 
   if (status === "granted") {
-    await ensureAndroidChannel();
+    await ensureAppointmentAlertsChannel();
   }
 
   return status;
@@ -93,16 +98,19 @@ export const scheduleNativeReminder = async ({
   if (!isNativeMobile) return null;
 
   ensureHandlerConfigured();
-  await ensureAndroidChannel();
+  await ensureAppointmentAlertsChannel();
 
   return Notifications.scheduleNotificationAsync({
     content: {
       title,
       body,
-      sound: "default",
+      sound: APPOINTMENT_ALERT_SOUND,
       data: { appointmentId },
     },
-    trigger: triggerAt,
+    trigger: {
+      channelId: APPOINTMENT_ALERTS_CHANNEL_ID,
+      date: triggerAt,
+    } as unknown as Notifications.NotificationTriggerInput,
   });
 };
 

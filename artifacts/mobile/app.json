@@ -2,7 +2,7 @@
   "expo": {
     "name": "DentBook - Dentist Appointment Booking",
     "slug": "mobile",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "mobile",
@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "dentist_booking_system.app",
-      "versionCode": 6
+      "versionCode": 7
     },
     "web": {
       "favicon": "./assets/images/icon.png"
@@ -31,8 +31,16 @@
         }
       ],
       "expo-font",
-      "expo-notifications",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "appointment-alerts",
+          "sounds": [
+            "./assets/sounds/alert-demo.mp3"
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

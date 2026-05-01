@@ -4,7 +4,7 @@ import Appointment from "../models/Appointment";
 import { generateSlots } from "../utils/slots";
 import { dbUnavailableMessage, isMongoConnectivityError } from "../utils/db-errors";
 
-const ACTIVE_BOOKING_STATUSES = ["pending", "confirmed"];
+const ACTIVE_BOOKING_STATUSES = ["pending", "accepted", "confirmed"];
 
 const getSingleDentist = async () => Dentist.findOne().sort({ createdAt: 1 });
 
@@ -23,6 +23,8 @@ export const getClinicInfo = async (_req: Request, res: Response) => {
       phone: dentist.phone,
       bio: dentist.bio,
       location: dentist.location,
+      profilePhotoUrl: dentist.profilePhotoUrl ?? "",
+      socialLinks: dentist.socialLinks ?? {},
       workingHours: dentist.workingHours,
       workingDays: dentist.workingDays,
       slotDuration: dentist.slotDuration,

@@ -14,6 +14,9 @@ const mapDentist = (dentist: any) => ({
   email: dentist.email,
   bio: dentist.bio,
   location: dentist.location ?? "",
+  profilePhotoUrl: dentist.profilePhotoUrl ?? "",
+  socialLinks: dentist.socialLinks ?? {},
+  expoPushToken: dentist.expoPushToken ?? "",
   workingHours: dentist.workingHours,
   workingDays: dentist.workingDays,
   slotDuration: dentist.slotDuration,
@@ -62,6 +65,9 @@ export const signupDentist = async (req: Request, res: Response) => {
       breakTimes: breakTimes ?? [],
       bio: bio ?? "",
       location: location ?? "",
+      profilePhotoUrl: "",
+      socialLinks: {},
+      expoPushToken: "",
     });
 
     const token = signDentistToken(String(dentist._id));
@@ -128,6 +134,8 @@ export const updateDentistProfile = async (req: AuthenticatedRequest, res: Respo
       "phone",
       "bio",
       "location",
+      "profilePhotoUrl",
+      "socialLinks",
       "workingHours",
       "workingDays",
       "slotDuration",
@@ -215,6 +223,38 @@ export const uploadDentistShowcaseMedia = async (req: AuthenticatedRequest, res:
   }
 };
 
+export const uploadDentistProfilePhoto = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const dentistId = String(req.dentistId ?? "");
+    if (!dentistId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const dataUri = String(req.body?.dataUri ?? "");
+    if (!dataUri.startsWith("data:")) {
+      return res.status(400).json({ message: "dataUri is required" });
+    }
+
+    const upload = await uploadBase64ToCloudinary(dataUri, "image", "dentbook/profile");
+    const dentist = await Dentist.findByIdAndUpdate(
+      dentistId,
+      { $set: { profilePhotoUrl: upload.url } },
+      { new: true }
+    );
+
+    if (!dentist) {
+      return res.status(404).json({ message: "Dentist not found" });
+    }
+
+    return res.status(201).json({
+      dentist: mapDentist({ ...dentist.toObject(), _id: String(dentist._id) }),
+      item: upload,
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to upload profile photo", error: String(error) });
+  }
+};
+
 export const deleteDentistShowcaseMedia = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const dentistId = String(req.dentistId ?? "");
@@ -246,5 +286,31 @@ export const deleteDentistShowcaseMedia = async (req: AuthenticatedRequest, res:
     });
   } catch (error) {
     return res.status(500).json({ message: "Failed to delete showcase media", error: String(error) });
+  }
+};
+
+export const updateDentistPushToken = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const dentistId = String(req.dentistId ?? "");
+    if (!dentistId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const expoPushToken = String(req.body?.expoPushToken ?? "").trim();
+    const dentist = await Dentist.findByIdAndUpdate(
+      dentistId,
+      { $set: { expoPushToken } },
+      { new: true }
+    );
+
+    if (!dentist) {
+      return res.status(404).json({ message: "Dentist not found" });
+    }
+
+    return res.status(200).json({
+      dentist: mapDentist({ ...dentist.toObject(), _id: String(dentist._id) }),
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to update push token", error: String(error) });
   }
 };

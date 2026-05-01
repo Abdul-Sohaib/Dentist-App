@@ -30,11 +30,14 @@ function getCalendarDays(year: number, month: number): (Date | null)[] {
 }
 
 function toDateStr(d: Date): string {
-  return d.toISOString().split("T")[0];
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function todayStr(): string {
-  return new Date().toISOString().split("T")[0];
+  return toDateStr(new Date());
 }
 
 export default function BookAppointmentScreen() {
@@ -46,6 +49,8 @@ export default function BookAppointmentScreen() {
   const [patientSearch, setPatientSearch] = useState("");
   const [showPatientPicker, setShowPatientPicker] = useState(!paramPatientId);
   const [problem, setProblem] = useState("");
+  const [patientAge, setPatientAge] = useState("");
+  const [bookingMode, setBookingMode] = useState<"pending" | "confirmed">("pending");
 
   const now = new Date();
   const [calMonth, setCalMonth] = useState(now.getMonth());
@@ -118,6 +123,7 @@ export default function BookAppointmentScreen() {
     if (!selectedDate) e.date = "Select a date";
     if (!selectedTime) e.time = "Select a time slot";
     if (!problem.trim()) e.problem = "Reason for visit is required";
+    if (patientAge.trim() && Number.isNaN(Number(patientAge))) e.age = "Age must be a number";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -131,6 +137,7 @@ export default function BookAppointmentScreen() {
       date: selectedDate,
       time: selectedTime,
       problem: problem.trim(),
+      status: bookingMode,
     });
     setLoading(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -349,6 +356,33 @@ export default function BookAppointmentScreen() {
             numberOfLines={3}
             style={{ minHeight: 80, textAlignVertical: "top" }}
           />
+          <Input
+            icon="hash"
+            label="Patient Age"
+            placeholder="Optional"
+            value={patientAge}
+            onChangeText={(t) => { setPatientAge(t); setErrors((e) => ({ ...e, age: "" })); }}
+            error={errors.age}
+            keyboardType="number-pad"
+          />
+          <View style={styles.modeRow}>
+            <Pressable
+              onPress={() => setBookingMode("pending")}
+              style={[styles.modeBtn, bookingMode === "pending" && styles.modeBtnActive]}
+            >
+              <Text style={[styles.modeText, bookingMode === "pending" && styles.modeTextActive]}>
+                Book
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setBookingMode("confirmed")}
+              style={[styles.modeBtn, bookingMode === "confirmed" && styles.modeBtnActive]}
+            >
+              <Text style={[styles.modeText, bookingMode === "confirmed" && styles.modeTextActive]}>
+                Reserve
+              </Text>
+            </Pressable>
+          </View>
         </View>
 
         <Button
@@ -463,6 +497,19 @@ const styles = StyleSheet.create({
   slotText: { fontFamily: "Inter_500Medium", fontSize: 14, color: Colors.text.primary },
   slotTextSelected: { color: Colors.white, fontFamily: "Inter_600SemiBold" },
   errText: { fontFamily: "Inter_400Regular", fontSize: 12, color: Colors.status.cancelled },
+  modeRow: { flexDirection: "row", gap: 8 },
+  modeBtn: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.background.secondary,
+  },
+  modeBtnActive: { backgroundColor: Colors.primaryLight, borderColor: Colors.primary },
+  modeText: { fontFamily: "Inter_600SemiBold", fontSize: 13, color: Colors.text.secondary },
+  modeTextActive: { color: Colors.primary },
   bookBtn: { marginTop: 4 },
 });
 

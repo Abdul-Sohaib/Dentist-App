@@ -4,6 +4,7 @@ const patientSchema = new Schema(
   {
     name: { type: String, required: true, trim: true },
     phone: { type: String, required: true, trim: true },
+    age: { type: Number, min: 0, max: 130 },
     notes: { type: String, default: "" },
     lastVisit: { type: String, default: "" },
     dentistId: { type: Schema.Types.ObjectId, ref: "Dentist", required: true, index: true },

@@ -1,9 +1,8 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
-  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -40,8 +39,6 @@ export default function DashboardScreen() {
     currentDentist,
     appointments,
     patients,
-    dentistNotificationPermission,
-    requestDentistNotificationPermission,
     refreshDentistDashboard,
   } = useApp();
   const insets = useSafeAreaInsets();
@@ -65,30 +62,6 @@ export default function DashboardScreen() {
     ).length;
     return { total, pending, confirmed, completed, upcoming, patients: patients.length };
   }, [appointments, patients, today]);
-
-  useEffect(() => {
-    if (!currentDentist || Platform.OS === "web") {
-      return;
-    }
-
-    if (dentistNotificationPermission !== "unknown") {
-      return;
-    }
-
-    Alert.alert(
-      "Enable Appointment Notifications",
-      "Allow reminders so you get notified 30 minutes before scheduled appointments.",
-      [
-        { text: "Not now", style: "cancel" },
-        {
-          text: "Allow",
-          onPress: () => {
-            void requestDentistNotificationPermission();
-          },
-        },
-      ]
-    );
-  }, [currentDentist, dentistNotificationPermission, requestDentistNotificationPermission]);
 
   const handleRefresh = async () => {
     if (isRefreshing) return;

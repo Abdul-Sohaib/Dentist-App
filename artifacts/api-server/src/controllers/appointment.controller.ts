@@ -1,10 +1,17 @@
 import type { Response } from "express";
 import Appointment, { APPOINTMENT_STATUSES } from "../models/Appointment";
+import Customer from "../models/Customer";
 import Dentist from "../models/Dentist";
 import NotificationAlert from "../models/NotificationAlert";
 import Patient from "../models/Patient";
 import type { AuthenticatedRequest } from "../types/auth";
+import { buildAppointmentDateTime } from "../utils/appointment-time";
 import { generateSlots } from "../utils/slots";
+import {
+  APPOINTMENT_ALERTS_CHANNEL_ID,
+  APPOINTMENT_ALERT_SOUND,
+  sendExpoPushNotification,
+} from "../services/push-notifications";
 
 const ACTIVE_BOOKING_STATUSES = ["pending", "accepted", "confirmed"];
 
@@ -19,9 +26,10 @@ const mapAppointment = (apt: any) => ({
   date: apt.date,
   timeSlot: apt.timeSlot,
   time: apt.timeSlot,
+  appointmentAt: apt.appointmentAt,
   reason: apt.reason ?? "",
   problem: apt.reason ?? "",
-  issueMedia: apt.issueMedia ?? null,
+  issueMedia: Array.isArray(apt.issueMedia) ? apt.issueMedia : apt.issueMedia ? [apt.issueMedia] : [],
   status: apt.status,
   createdAt: apt.createdAt,
   updatedAt: apt.updatedAt,
@@ -59,6 +67,30 @@ const isSlotAvailable = async (dentistId: string, date: string, timeSlot: string
   return !existing;
 };
 
+const notifyCustomer = async (
+  appointment: { _id: unknown; bookedByCustomerId?: unknown; ticketId?: string; date: string; timeSlot: string },
+  title: string,
+  body: string
+) => {
+  const customerId = appointment.bookedByCustomerId ? String(appointment.bookedByCustomerId) : "";
+  if (!customerId) return;
+
+  const customer = await Customer.findById(customerId).select("expoPushToken");
+  await sendExpoPushNotification(customer?.expoPushToken ?? "", {
+    title,
+    body,
+    sound: APPOINTMENT_ALERT_SOUND,
+    channelId: APPOINTMENT_ALERTS_CHANNEL_ID,
+    priority: "high",
+    data: {
+      appointmentId: String(appointment._id),
+      ticketId: appointment.ticketId ?? "",
+      date: appointment.date,
+      time: appointment.timeSlot,
+    },
+  });
+};
+
 export const createAppointment = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { patientId, date, timeSlot, reason, problem, status } = req.body;
@@ -87,8 +119,11 @@ export const createAppointment = async (req: AuthenticatedRequest, res: Response
       bookedForPhone: patient.phone,
       date,
       timeSlot,
+      appointmentAt: buildAppointmentDateTime(date, timeSlot),
       reason: reason ?? problem ?? "",
+      issueMedia: [],
       status: APPOINTMENT_STATUSES.includes(status) ? status : "pending",
+      reminderSent: false,
     });
 
     return res.status(201).json({
@@ -126,6 +161,21 @@ export const updateAppointmentStatus = async (req: AuthenticatedRequest, res: Re
       return res.status(400).json({ message: "Invalid appointment status" });
     }
 
+    if (status === "rejected" || status === "cancelled") {
+      const deleted = await Appointment.findOne({ _id: id, dentistId: req.dentistId });
+      if (!deleted) {
+        return res.status(404).json({ message: "Appointment not found" });
+      }
+      await notifyCustomer(
+        { ...deleted.toObject(), _id: String(deleted._id) },
+        "Appointment Rejected",
+        "Please don’t worry. Check other available dates."
+      );
+      await Appointment.findOneAndDelete({ _id: id, dentistId: req.dentistId });
+      await NotificationAlert.deleteMany({ appointmentId: deleted._id });
+      return res.status(200).json({ message: "Appointment removed", removed: true });
+    }
+
     const appointment = await Appointment.findOneAndUpdate(
       { _id: id, dentistId: req.dentistId },
       { $set: { status } },
@@ -148,15 +198,15 @@ export const updateAppointmentStatus = async (req: AuthenticatedRequest, res: Re
           : "appointment_completed";
       const title =
         customerStatus === "accepted"
-          ? "Appointment accepted"
+          ? "Appointment Accepted"
           : customerStatus === "rejected"
-          ? "Appointment rejected"
-          : "Appointment completed";
+          ? "Appointment Rejected"
+          : "Appointment Completed";
       const message =
         customerStatus === "accepted"
-          ? `Your appointment ${appointment.ticketId} has been accepted by the clinic.`
+          ? "Your appointment is accepted. Please leave early for ease."
           : customerStatus === "rejected"
-          ? `Your appointment ${appointment.ticketId} has been rejected by the clinic.`
+          ? "Please don’t worry. Check other available dates."
           : `Your appointment ${appointment.ticketId} has been marked as completed.`;
 
       await NotificationAlert.create({
@@ -168,6 +218,14 @@ export const updateAppointmentStatus = async (req: AuthenticatedRequest, res: Re
         message,
         deliveredAt: new Date(),
       });
+
+      if (customerStatus === "accepted" || customerStatus === "rejected") {
+        await notifyCustomer(
+          { ...appointment.toObject(), _id: String(appointment._id) },
+          title,
+          message
+        );
+      }
     }
 
     return res.status(200).json({
@@ -187,6 +245,8 @@ export const deleteAppointmentById = async (req: AuthenticatedRequest, res: Resp
     if (!deleted) {
       return res.status(404).json({ message: "Appointment not found" });
     }
+
+    await NotificationAlert.deleteMany({ appointmentId: deleted._id });
 
     return res.status(200).json({ message: "Appointment deleted" });
   } catch (error) {
@@ -242,4 +302,3 @@ export const getAvailableSlots = async (req: AuthenticatedRequest | { query: Rec
     return res.status(500).json({ message: "Failed to fetch slots", error: String(error) });
   }
 };
-

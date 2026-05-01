@@ -14,11 +14,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
+import MediaPreview from "@/components/MediaPreview";
 import { useApp } from "@/context/AppContext";
-import {
-  isNativeNotificationSupported,
-  requestNativeNotificationPermission,
-} from "@/utils/nativeNotifications";
 
 function statusColor(status: string) {
   if (status === "accepted") return Colors.status.confirmed;
@@ -33,8 +30,8 @@ export default function CustomerDashboard() {
     clinicProfile,
     customerAppointments,
     customerAlerts,
+    cancelCustomerAppointment,
     customerLogout,
-    updateCustomerNotificationPermission,
     refreshCustomerDashboard,
   } = useApp();
   const insets = useSafeAreaInsets();
@@ -44,50 +41,7 @@ export default function CustomerDashboard() {
       router.replace("/customer/auth/login");
       return;
     }
-
-    if (currentCustomer.notificationPermission === "unknown") {
-      Alert.alert(
-        "Enable Notifications",
-        "Allow appointment updates and reminder alerts?",
-        [
-          {
-            text: "Not now",
-            style: "cancel",
-            onPress: () => {
-              updateCustomerNotificationPermission("denied").catch(() => {});
-            },
-          },
-          {
-            text: "Allow",
-            onPress: async () => {
-              try {
-                if (isNativeNotificationSupported()) {
-                  const permission = await requestNativeNotificationPermission();
-                  await updateCustomerNotificationPermission(
-                    permission === "granted" ? "granted" : "denied"
-                  );
-                  return;
-                }
-
-                const NotificationApi = (globalThis as any)?.Notification;
-                if (NotificationApi?.requestPermission) {
-                  const permission = await NotificationApi.requestPermission();
-                  await updateCustomerNotificationPermission(
-                    permission === "granted" ? "granted" : "denied"
-                  );
-                  return;
-                }
-
-                await updateCustomerNotificationPermission("denied");
-              } catch {
-                updateCustomerNotificationPermission("denied").catch(() => {});
-              }
-            },
-          },
-        ]
-      );
-    }
-  }, [currentCustomer, updateCustomerNotificationPermission]);
+  }, [currentCustomer]);
 
   if (!currentCustomer) return null;
 
@@ -105,10 +59,28 @@ export default function CustomerDashboard() {
   const consultationTime = clinicProfile.slotDuration
     ? `${clinicProfile.slotDuration} minutes per patient`
     : "-";
-  const showcaseItems = [
-    ...(clinicProfile.showcasePhotos ?? []),
-    ...(clinicProfile.showcaseVideos ?? []),
-  ];
+  const showcaseItems = [...(clinicProfile.showcasePhotos ?? []), ...(clinicProfile.showcaseVideos ?? [])];
+  const socialEntries = [
+    ["Website", clinicProfile.socialLinks?.website],
+    ["Instagram", clinicProfile.socialLinks?.instagram],
+    ["Facebook", clinicProfile.socialLinks?.facebook],
+    ["X", clinicProfile.socialLinks?.x],
+    ["LinkedIn", clinicProfile.socialLinks?.linkedin],
+    ["YouTube", clinicProfile.socialLinks?.youtube],
+  ].filter(([, url]) => Boolean(url)) as Array<[string, string]>;
+
+  const handleCancel = async (appointmentId: string) => {
+    if (Platform.OS === "web") {
+      if (!window.confirm("Cancel this appointment? This will remove it from the system.")) return;
+    } else {
+      Alert.alert("Cancel Ticket", "Cancel this appointment and remove it from the system?", [
+        { text: "No", style: "cancel" },
+        { text: "Yes", style: "destructive", onPress: () => cancelCustomerAppointment(appointmentId) },
+      ]);
+      return;
+    }
+    await cancelCustomerAppointment(appointmentId);
+  };
 
   return (
     <View style={styles.root}>
@@ -150,8 +122,27 @@ export default function CustomerDashboard() {
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Available Doctor</Text>
-          <Text style={styles.doctorName}>{clinicProfile.name || "Doctor"}</Text>
-          <Text style={styles.clinicName}>{clinicProfile.clinicName || "Clinic"}</Text>
+          <View style={styles.doctorHeader}>
+            <View style={styles.doctorAvatar}>
+              {clinicProfile.profilePhotoUrl ? (
+                <Image source={{ uri: clinicProfile.profilePhotoUrl }} style={styles.doctorPhoto} />
+              ) : (
+                <Text style={styles.doctorAvatarText}>
+                  {(clinicProfile.name || "Doctor")
+                    .replace("Dr. ", "")
+                    .split(" ")
+                    .map((w) => w[0])
+                    .slice(0, 2)
+                    .join("")
+                    .toUpperCase()}
+                </Text>
+              )}
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.doctorName}>{clinicProfile.name || "Doctor"}</Text>
+              <Text style={styles.clinicName}>{clinicProfile.clinicName || "Clinic"}</Text>
+            </View>
+          </View>
           <View style={styles.row}>
             <Feather name="phone" size={14} color={Colors.text.muted} />
             <Text style={styles.rowText}>{clinicProfile.phone || "N/A"}</Text>
@@ -178,6 +169,16 @@ export default function CustomerDashboard() {
             <Feather name="user-check" size={14} color={Colors.text.muted} />
             <Text style={styles.rowText}>Consultation Time: {consultationTime}</Text>
           </View>
+          {socialEntries.length > 0 ? (
+            <View style={styles.socialWrap}>
+              {socialEntries.map(([label, url]) => (
+                <Pressable key={label} onPress={() => Linking.openURL(url)} style={styles.socialChip}>
+                  <Feather name="link" size={12} color={Colors.primary} />
+                  <Text style={styles.socialText}>{label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
           <Pressable
             onPress={() => router.push("/customer/book")}
             style={({ pressed }) => [styles.primaryBtn, { opacity: pressed ? 0.9 : 1 }]}
@@ -201,14 +202,7 @@ export default function CustomerDashboard() {
             <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
               {showcaseItems.map((item) => (
                 <View key={item.publicId} style={styles.carouselCard}>
-                  {item.resourceType === "image" ? (
-                    <Image source={{ uri: item.url }} style={styles.carouselImage} />
-                  ) : (
-                    <Pressable style={styles.videoCard} onPress={() => Linking.openURL(item.url)}>
-                      <Feather name="play-circle" size={32} color={Colors.primary} />
-                      <Text style={styles.link}>Play video ({Math.ceil(item.durationSeconds ?? 0)}s)</Text>
-                    </Pressable>
-                  )}
+                  <MediaPreview item={item} />
                 </View>
               ))}
             </ScrollView>
@@ -232,10 +226,17 @@ export default function CustomerDashboard() {
                   <Text style={styles.meta}>{item.date} at {item.time}</Text>
                   <Text style={styles.meta}>{item.bookedForName || currentCustomer.name}</Text>
                 </View>
-                <View style={[styles.badge, { backgroundColor: `${statusColor(item.status)}20` }]}>
-                  <Text style={[styles.badgeText, { color: statusColor(item.status) }]}>
-                    {item.status.toUpperCase()}
-                  </Text>
+                <View style={styles.appointmentRight}>
+                  <View style={[styles.badge, { backgroundColor: `${statusColor(item.status)}20` }]}>
+                    <Text style={[styles.badgeText, { color: statusColor(item.status) }]}>
+                      {item.status.toUpperCase()}
+                    </Text>
+                  </View>
+                  {(item.status === "pending" || item.status === "accepted") ? (
+                    <Pressable onPress={() => handleCancel(item.id)} style={styles.cancelBtn}>
+                      <Text style={styles.cancelBtnText}>Cancel</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               </View>
             ))
@@ -330,12 +331,35 @@ const styles = StyleSheet.create({
       web: { boxShadow: "0 2px 10px rgba(0,0,0,0.06)" },
     }),
   },
+  doctorHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
+  doctorAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    backgroundColor: Colors.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  doctorAvatarText: { fontFamily: "Inter_700Bold", fontSize: 18, color: Colors.primary },
+  doctorPhoto: { width: "100%", height: "100%" },
   sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   cardTitle: { fontFamily: "Inter_700Bold", fontSize: 15, color: Colors.text.primary },
   doctorName: { fontFamily: "Inter_600SemiBold", fontSize: 16, color: Colors.primary },
   clinicName: { fontFamily: "Inter_500Medium", fontSize: 13, color: Colors.text.secondary },
   row: { flexDirection: "row", alignItems: "center", gap: 6 },
   rowText: { fontFamily: "Inter_400Regular", fontSize: 12, color: Colors.text.secondary },
+  socialWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 2 },
+  socialChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: Colors.primaryLight,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  socialText: { fontFamily: "Inter_600SemiBold", fontSize: 12, color: Colors.primary },
   aboutText: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
@@ -362,10 +386,20 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 10,
   },
+  appointmentRight: { alignItems: "flex-end", gap: 8 },
   ticket: { fontFamily: "Inter_600SemiBold", fontSize: 12, color: Colors.text.primary },
   meta: { fontFamily: "Inter_400Regular", fontSize: 11, color: Colors.text.secondary },
   badge: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 },
   badgeText: { fontFamily: "Inter_600SemiBold", fontSize: 10 },
+  cancelBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Colors.status.cancelledBg,
+    backgroundColor: Colors.status.cancelledBg,
+  },
+  cancelBtnText: { fontFamily: "Inter_700Bold", fontSize: 10, color: Colors.status.cancelled },
   upcomingText: { fontFamily: "Inter_500Medium", fontSize: 12, color: Colors.primary, marginTop: 4 },
   link: { fontFamily: "Inter_600SemiBold", fontSize: 12, color: Colors.primary },
   alertRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
@@ -376,13 +410,12 @@ const styles = StyleSheet.create({
     width: 280,
     marginRight: 10,
     borderRadius: 12,
-    overflow: "hidden",
     borderWidth: 1,
     borderColor: Colors.border,
   },
   carouselImage: { width: "100%", height: 180 },
   videoCard: {
-    height: 180,
+    height: "100%",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
